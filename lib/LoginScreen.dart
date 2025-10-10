@@ -21,9 +21,9 @@ class _LoginscreenState extends State<Loginscreen> {
 
   void validaUser(String login, String password, BuildContext context) {
     if (login == "duoc" && password == "duoc2025") {
-      TextEstado = "TODO OK";
+      TextEstado = "TODO OK.";
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("TODO OK")),
+        const SnackBar(content: Text("TODO OK.")),
       );
 
       Navigator.push(
