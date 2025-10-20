@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:restaurantsdf/AdminScreen.dart';
 import 'MeseroScreen.dart';
+import 'Cocinascreen.dart';
+import 'AdminScreen.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class Loginscreen extends StatefulWidget {
@@ -20,23 +23,36 @@ class _LoginscreenState extends State<Loginscreen> {
   final messengerKey = GlobalKey<ScaffoldMessengerState>();
 
   void validaUser(String login, String password, BuildContext context) {
-    if (login == "duoc" && password == "duoc2025") {
-      TextEstado = "TODO OK.";
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("TODO OK.")),
-      );
+  if (login == "duoc" && password == "duoc2025") {
+    TextEstado = "TODO OK.";
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Inicio de sesión exitoso")),
+    );
 
-      Navigator.push(
-          context, MaterialPageRoute(builder: (context) => MeseroScreen()));
-    } else {
-      TextEstado = "TODO MAL";
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ERROR DE CREDENCIALES')),
-      );
+    Widget nextScreen;
 
-      setState(() {});
-    }
+    if (_selectedRole == "Mesero") {
+        nextScreen = MeseroScreen();
+      } else if (_selectedRole == "Cocinero") {
+        nextScreen = CocinaScreen();
+      } else {
+        nextScreen = AdminScreen();
+      }
+
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => nextScreen),
+    );
+  } else {
+    TextEstado = "TODO MAL";
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('ERROR DE CREDENCIALES')),
+    );
+    setState(() {});
   }
+}
+
 
   TextField cajaTexto(String text, TextEditingController controller, bool isPass) {
     return TextField(
