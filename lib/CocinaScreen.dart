@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-class KitchenScreen extends StatelessWidget {
-  const KitchenScreen({super.key});
+class CocinaScreen extends StatelessWidget {
+  const CocinaScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
