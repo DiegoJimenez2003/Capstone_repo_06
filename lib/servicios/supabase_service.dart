@@ -1,52 +1,101 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/order_status.dart';
 
 class SupabaseService {
-  static final SupabaseClient client = Supabase.instance.client;
+  SupabaseClient get _client => Supabase.instance.client;
 
-  // 🔹 Inicializar conexión a Supabase
-  static Future<void> initialize() async {
-    await Supabase.initialize(
-      url: 'https://kugghmlnwbjemreammpr.supabase.co',
-      anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt1Z2dobWxud2JqZW1yZWFtbXByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2OTMzNzYsImV4cCI6MjA3NzI2OTM3Nn0.Hi8EiKTHhwnu7BGvzznOJ93uaZId8uphnH5HLp-k55Q',
-  );
+  /// =====================
+  /// 🔹 CREAR PEDIDO
+  /// =====================
+  Future<String> createOrder({
+    required int tableNumber,
+    required String waiter,
+    required String customerGender,
+    required int total,
+    required String status, // 'pendiente', 'listo', etc.
+  }) async {
+    final id = DateTime.now().millisecondsSinceEpoch.toString(); // ID simple
+    final insertPayload = {
+      'id': id,
+      'table_number': tableNumber,
+      'status': status,
+      'total': total,
+      'waiter': waiter,
+      'customer_gender': customerGender,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+
+    final response = await _client
+        .from('orders')
+        .insert(insertPayload)
+        .select('id')
+        .maybeSingle();
+
+    if (response == null || response['id'] == null) {
+      throw Exception('❌ No se pudo crear el pedido.');
+    }
+
+    return response['id'].toString();
   }
 
-  // 🔹 Obtener todos los pedidos
-  Future<List<Map<String, dynamic>>> getOrders() async {
-    final response = await client
+  /// =====================
+  /// 🔹 AGREGAR PRODUCTOS
+  /// =====================
+  Future<void> addOrderItems(
+      String orderId, List<Map<String, dynamic>> itemsRows) async {
+    final withOrderId = itemsRows.map((m) {
+      final id = DateTime.now().microsecondsSinceEpoch.toString();
+      return {
+        ...m,
+        'id': id,
+        'order_id': orderId,
+      };
+    }).toList();
+
+    final result = await _client.from('order_items').insert(withOrderId);
+
+    if (result.error != null) {
+      throw Exception('❌ Error al insertar ítems: ${result.error!.message}');
+    }
+  }
+
+  /// =====================
+  /// 🔹 OBTENER PEDIDOS DEL MESERO
+  /// =====================
+  Future<List<Map<String, dynamic>>> fetchMyOrdersWithItems(
+      String waiter) async {
+    final data = await _client
         .from('orders')
-        .select('*, order_items(*)')
+        .select('''
+          id,
+          table_number,
+          waiter,
+          customer_gender,
+          status,
+          total,
+          timestamp,
+          order_items(
+            id,
+            name,
+            category,
+            price,
+            quantity,
+            product_status
+          )
+        ''')
+        .eq('waiter', waiter)
         .order('timestamp', ascending: false);
 
-    if (response.isEmpty) {
-      print("No hay pedidos.");
-      return [];
-    }
-    return response;
+    return List<Map<String, dynamic>>.from(data);
   }
 
-  // 🔹 Insertar nuevo pedido
-  Future<void> insertOrder(Map<String, dynamic> order) async {
-    await client.from('orders').insert(order);
-  }
-
-  // 🔹 Insertar productos del pedido
-  Future<void> insertOrderItems(List<Map<String, dynamic>> items) async {
-    await client.from('order_items').insert(items);
-  }
-
-  // 🔹 Actualizar estado del pedido
-  Future<void> updateOrderStatus(String orderId, String status) async {
-    await client.from('orders').update({'status': status}).eq('id', orderId);
-  }
-
-  // 🔹 Escuchar cambios en tiempo real (Realtime)
-  Stream<List<Map<String, dynamic>>> subscribeOrders() {
-    return client
+  /// =====================
+  /// 🔹 ACTUALIZAR ESTADO
+  /// =====================
+  Future<void> updateOrderStatus(String orderId, OrderStatus status) async {
+    await _client
         .from('orders')
-        .stream(primaryKey: ['id'])
-        .order('timestamp', ascending: false)
-        .map((data) => data);
+        .update({'status': status.toDb()})
+        .eq('id', orderId);
   }
 }

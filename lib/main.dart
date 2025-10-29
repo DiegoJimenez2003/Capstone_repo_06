@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-// Asegúrate que estos archivos existen en lib/
-import 'package:restaurantsdf/loginscreen.dart';
-import 'package:restaurantsdf/AdminScreen.dart';
-
+import 'package:restaurantsdf/screens/loginscreen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
