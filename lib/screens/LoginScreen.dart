@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'AdminScreen.dart';
-import 'MeseroScreen.dart';
-import 'Cocinascreen.dart';
+import '../screens/AdminScreen.dart';
+import '../screens/AdminScreen.dart';
+import '../screens/CocinaScreen.dart';
+import '../screens/MeseroScreen.dart';
 
 class Loginscreen extends StatefulWidget {
   const Loginscreen({super.key});
