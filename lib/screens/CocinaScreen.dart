@@ -12,6 +12,7 @@ class CocinaScreen extends StatefulWidget {
 class _CocinaScreenState extends State<CocinaScreen> {
   final _svc = SupabaseService();
   List<Map<String, dynamic>> pedidos = [];
+  final List<OrderStatus> _statusOptions = OrderStatusMapper.workflow();
 
   @override
   void initState() {
@@ -28,8 +29,9 @@ class _CocinaScreenState extends State<CocinaScreen> {
     try {
       await _svc.updateProductStatus(itemId, nuevoEstado);
       await _cargarPedidos();
+      final label = OrderStatusMapper.fromDb(nuevoEstado).label;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("✅ Estado actualizado a '$nuevoEstado'")),
+        SnackBar(content: Text("✅ Estado actualizado a '$label'")),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -39,34 +41,20 @@ class _CocinaScreenState extends State<CocinaScreen> {
   }
 
   Color getColor(String status) {
-    switch (status) {
+    final normalized = OrderStatusMapper.normalize(status);
+    switch (normalized) {
       case 'pendiente':
         return Colors.yellow.shade600;
       case 'preparacion':
         return Colors.blue.shade600;
       case 'horno':
         return Colors.orange.shade700;
-      case 'entregado':
-        return Colors.purple.shade600;
       case 'listo':
         return Colors.green.shade600;
+      case 'entregado':
+        return Colors.purple.shade600;
       default:
         return Colors.grey;
-    }
-  }
-
-  List<String> nextStatuses(String actual) {
-    switch (actual) {
-      case 'pendiente':
-        return ['preparacion'];
-      case 'preparacion':
-        return ['horno'];
-      case 'horno':
-        return ['entregado'];
-      case 'entregado':
-        return ['listo'];
-      default:
-        return [];
     }
   }
 
@@ -88,6 +76,9 @@ class _CocinaScreenState extends State<CocinaScreen> {
               padding: const EdgeInsets.all(12),
               children: pedidos.map((pedido) {
                 final items = List<Map<String, dynamic>>.from(pedido['order_items']);
+                final orderStatusValue = OrderStatusMapper.normalize(
+                    pedido['status'] ?? 'pendiente');
+                final orderStatus = OrderStatusMapper.fromDb(orderStatusValue);
                 return Card(
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   elevation: 2,
@@ -97,31 +88,56 @@ class _CocinaScreenState extends State<CocinaScreen> {
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(
-                      "Total: \$${pedido['total']} • Estado: ${pedido['status']}",
+                      "Total: \$${pedido['total']} • Estado: ${orderStatus.label}",
                       style: const TextStyle(color: Colors.black54),
                     ),
                     children: items.map((item) {
-                      final estado = item['product_status'];
+                      final estado = OrderStatusMapper.normalize(
+                          item['product_status'] ?? 'pendiente');
+                      final statusEnum = OrderStatusMapper.fromDb(estado);
                       return ListTile(
                         title: Text("${item['name']} (${item['quantity']}x)"),
-                        subtitle: Text("Estado: $estado"),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
+                        subtitle: Row(
                           children: [
-                            for (var next in nextStatuses(estado))
-                              Padding(
-                                padding: const EdgeInsets.only(left: 4),
-                                child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: getColor(next),
-                                  ),
-                                  onPressed: () =>
-                                      _actualizarEstadoProducto(item['id'], next),
-                                  child: Text(next.toUpperCase(),
-                                      style: const TextStyle(color: Colors.white)),
-                                ),
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: getColor(estado),
+                                shape: BoxShape.circle,
                               ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text('Estado: ${statusEnum.label}'),
                           ],
+                        ),
+                        trailing: DropdownButtonHideUnderline(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              color: getColor(estado).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: getColor(estado)),
+                            ),
+                            child: DropdownButton<String>(
+                              value: estado,
+                              dropdownColor: Colors.white,
+                              icon: const Icon(Icons.keyboard_arrow_down),
+                              items: _statusOptions
+                                  .map(
+                                    (status) => DropdownMenuItem<String>(
+                                      value: status.toDb(),
+                                      child: Text(status.label),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) {
+                                if (value != null && value != estado) {
+                                  _actualizarEstadoProducto(item['id'], value);
+                                }
+                              },
+                            ),
+                          ),
                         ),
                       );
                     }).toList(),

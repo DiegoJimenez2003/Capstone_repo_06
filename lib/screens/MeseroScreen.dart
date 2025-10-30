@@ -85,26 +85,24 @@ class _MeseroScreenState extends State<MeseroScreen> {
     switch (status) {
       case OrderStatus.pendiente:
         return Colors.yellow.shade600;
-      case OrderStatus.enPreparacion:
+      case OrderStatus.preparacion:
         return Colors.blue.shade600;
+      case OrderStatus.horno:
+        return Colors.orange.shade600;
       case OrderStatus.listo:
         return Colors.green.shade600;
+      case OrderStatus.entregado:
+        return Colors.purple.shade600;
       case OrderStatus.cancelado:
         return Colors.red.shade600;
     }
   }
 
   String getStatusText(OrderStatus status) {
-    switch (status) {
-      case OrderStatus.pendiente:
-        return 'Pendiente';
-      case OrderStatus.enPreparacion:
-        return 'En preparación';
-      case OrderStatus.listo:
-        return 'Listo';
-      case OrderStatus.cancelado:
-        return 'Cancelado';
+    if (status == OrderStatus.cancelado) {
+      return 'Cancelado';
     }
+    return status.label;
   }
 
   void addItemToOrder(Map<String, dynamic> item, String category) {

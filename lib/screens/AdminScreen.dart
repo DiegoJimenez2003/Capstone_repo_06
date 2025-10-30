@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import '../models/order_status.dart';
+
 class AdminScreen extends StatelessWidget {
   const AdminScreen({super.key});
 
@@ -92,8 +94,8 @@ class AdminScreen extends StatelessWidget {
             const SizedBox(height: 10),
 
             _buildOrderCard("Mesa 3", "Mesero: Ana", 3, 25000, "pendiente"),
-            _buildOrderCard("Mesa 5", "Mesero: Carlos", 2, 18000, "en_preparacion"),
-            _buildOrderCard("Mesa 8", "Mesero: José", 4, 42000, "listo"),
+            _buildOrderCard("Mesa 5", "Mesero: Carlos", 2, 18000, "preparacion"),
+            _buildOrderCard("Mesa 8", "Mesero: José", 4, 42000, "entregado"),
 
             const SizedBox(height: 40),
 
@@ -178,22 +180,10 @@ class AdminScreen extends StatelessWidget {
   }
 
   Widget _buildOrderCard(String mesa, String mesero, int items, int total, String estado) {
-    Color color;
-    String label;
-
-    switch (estado) {
-      case "pendiente":
-        color = Colors.amber;
-        label = "Pendiente";
-        break;
-      case "en_preparacion":
-        color = Colors.blueAccent;
-        label = "En preparación";
-        break;
-      default:
-        color = Colors.green;
-        label = "Listo";
-    }
+    final normalized = OrderStatusMapper.normalize(estado);
+    final status = OrderStatusMapper.fromDb(normalized);
+    final color = _statusColor(status);
+    final label = status == OrderStatus.cancelado ? 'Cancelado' : status.label;
 
     return Card(
       elevation: 2,
@@ -219,5 +209,22 @@ class AdminScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Color _statusColor(OrderStatus status) {
+    switch (status) {
+      case OrderStatus.pendiente:
+        return Colors.amber;
+      case OrderStatus.preparacion:
+        return Colors.blueAccent;
+      case OrderStatus.horno:
+        return Colors.deepOrange;
+      case OrderStatus.listo:
+        return Colors.green;
+      case OrderStatus.entregado:
+        return Colors.purple;
+      case OrderStatus.cancelado:
+        return Colors.redAccent;
+    }
   }
 }

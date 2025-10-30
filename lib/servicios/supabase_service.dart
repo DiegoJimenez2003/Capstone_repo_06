@@ -125,9 +125,64 @@ class SupabaseService {
   /// 🔹 ACTUALIZAR ESTADO DE UN PRODUCTO
   /// =====================
   Future<void> updateProductStatus(String itemId, String newStatus) async {
-    await _client
+    final normalizedStatus = OrderStatusMapper.normalize(newStatus);
+
+    final updatedRow = await _client
         .from('order_items')
-        .update({'product_status': newStatus})
-        .eq('id', itemId);
+        .update({'product_status': normalizedStatus})
+        .eq('id', itemId)
+        .select('order_id')
+        .maybeSingle();
+
+    if (updatedRow == null || updatedRow['order_id'] == null) {
+      return;
+    }
+
+    final orderId = updatedRow['order_id'] as String;
+
+    final items = await _client
+        .from('order_items')
+        .select('product_status')
+        .eq('order_id', orderId);
+
+    final orderStatus = _determineOrderStatusFromItems(items);
+
+    await updateOrderStatus(orderId, orderStatus);
+  }
+
+  OrderStatus _determineOrderStatusFromItems(dynamic itemsResponse) {
+    final items = List<Map<String, dynamic>>.from(itemsResponse ?? const []);
+    if (items.isEmpty) {
+      return OrderStatus.pendiente;
+    }
+
+    const priorities = {
+      OrderStatus.pendiente: 0,
+      OrderStatus.preparacion: 1,
+      OrderStatus.horno: 2,
+      OrderStatus.listo: 3,
+      OrderStatus.entregado: 4,
+    };
+
+    var minPriority = 999;
+    OrderStatus? resultingStatus;
+
+    for (final item in items) {
+      final rawStatus = (item['product_status'] as String?) ?? 'pendiente';
+      final normalized = OrderStatusMapper.fromDb(rawStatus);
+
+      if (!priorities.containsKey(normalized)) {
+        continue;
+      }
+
+      final priority = priorities[normalized]!;
+
+      if (priority < minPriority) {
+        minPriority = priority;
+        resultingStatus = normalized;
+      }
+    }
+
+    return resultingStatus ?? OrderStatus.pendiente;
   }
 }
