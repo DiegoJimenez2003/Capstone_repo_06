@@ -14,7 +14,7 @@ class SupabaseService {
     required int total,
     required String status, // 'pendiente', 'listo', etc.
   }) async {
-    final id = DateTime.now().millisecondsSinceEpoch.toString(); // ID simple
+    final id = DateTime.now().millisecondsSinceEpoch.toString();
     final insertPayload = {
       'id': id,
       'table_number': tableNumber,
@@ -52,11 +52,7 @@ class SupabaseService {
       };
     }).toList();
 
-    final result = await _client.from('order_items').insert(withOrderId);
-
-    if (result.error != null) {
-      throw Exception('❌ Error al insertar ítems: ${result.error!.message}');
-    }
+    await _client.from('order_items').insert(withOrderId);
   }
 
   /// =====================
@@ -90,12 +86,48 @@ class SupabaseService {
   }
 
   /// =====================
-  /// 🔹 ACTUALIZAR ESTADO
+  /// 🔹 ACTUALIZAR ESTADO DE PEDIDO
   /// =====================
   Future<void> updateOrderStatus(String orderId, OrderStatus status) async {
     await _client
         .from('orders')
         .update({'status': status.toDb()})
         .eq('id', orderId);
+  }
+
+  /// =====================
+  /// 🔹 OBTENER TODOS LOS PEDIDOS (COCINA)
+  /// =====================
+  Future<List<Map<String, dynamic>>> fetchAllOrdersWithItems() async {
+    final data = await _client
+        .from('orders')
+        .select('''
+          id,
+          table_number,
+          waiter,
+          status,
+          total,
+          order_items (
+            id,
+            name,
+            category,
+            price,
+            quantity,
+            product_status
+          )
+        ''')
+        .order('timestamp', ascending: false);
+
+    return List<Map<String, dynamic>>.from(data);
+  }
+
+  /// =====================
+  /// 🔹 ACTUALIZAR ESTADO DE UN PRODUCTO
+  /// =====================
+  Future<void> updateProductStatus(String itemId, String newStatus) async {
+    await _client
+        .from('order_items')
+        .update({'product_status': newStatus})
+        .eq('id', itemId);
   }
 }
