@@ -340,7 +340,7 @@ class _MeseroScreenState extends State<MeseroScreen> {
                     final status = OrderStatusMapper.fromDb(orderRow['status'] as String);
                     final total = (orderRow['total'] as num?)?.toInt() ?? 0;
                     final items =
-                        List<Map<String, dynamic>>.from(orderRow['order_items'] ?? const []);
+                        List<Map<String, dynamic>>.from(orderRow['detalle_pedido'] ?? const []);
                     final mesa = "Mesa ${orderRow['table_number']}";
 
                     return Card(
