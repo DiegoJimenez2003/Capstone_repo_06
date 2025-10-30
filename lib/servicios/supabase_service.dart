@@ -52,7 +52,7 @@ class SupabaseService {
       };
     }).toList();
 
-    await _client.from('detalle_pedido').insert(withOrderId);
+    await _client.from('order_items').insert(withOrderId);
   }
 
   /// =====================
@@ -70,7 +70,7 @@ class SupabaseService {
           status,
           total,
           timestamp,
-          detalle_pedido(
+          order_items(
             id,
             name,
             category,
@@ -107,7 +107,7 @@ class SupabaseService {
           waiter,
           status,
           total,
-          detalle_pedido (
+          order_items (
             id,
             name,
             category,
@@ -128,7 +128,7 @@ class SupabaseService {
     final normalizedStatus = OrderStatusMapper.normalize(newStatus);
 
     final updatedRow = await _client
-        .from('detalle_pedido')
+        .from('order_items')
         .update({'product_status': normalizedStatus})
         .eq('id', itemId)
         .select('order_id')
@@ -141,7 +141,7 @@ class SupabaseService {
     final orderId = updatedRow['order_id'] as String;
 
     final items = await _client
-        .from('detalle_pedido')
+        .from('order_items')
         .select('product_status')
         .eq('order_id', orderId);
 

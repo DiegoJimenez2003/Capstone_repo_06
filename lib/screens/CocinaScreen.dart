@@ -75,7 +75,7 @@ class _CocinaScreenState extends State<CocinaScreen> {
           : ListView(
               padding: const EdgeInsets.all(12),
               children: pedidos.map((pedido) {
-                final items = List<Map<String, dynamic>>.from(pedido['detalle_pedido']);
+                final items = List<Map<String, dynamic>>.from(pedido['order_items']);
                 final orderStatusValue = OrderStatusMapper.normalize(
                     pedido['status'] ?? 'pendiente');
                 final orderStatus = OrderStatusMapper.fromDb(orderStatusValue);
