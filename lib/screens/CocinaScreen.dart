@@ -1,30 +1,6 @@
 import 'package:flutter/material.dart';
-
-enum OrderStatus { pendiente, enPreparacion, listo, cancelado }
-
-class OrderItem {
-  final String name;
-  final int quantity;
-  OrderItem({required this.name, required this.quantity});
-}
-
-class Order {
-  final String id;
-  final int tableNumber;
-  final String waiter;
-  OrderStatus status;
-  final DateTime timestamp;
-  final List<OrderItem> items;
-
-  Order({
-    required this.id,
-    required this.tableNumber,
-    required this.waiter,
-    this.status = OrderStatus.pendiente,
-    required this.timestamp,
-    required this.items,
-  });
-}
+import '../servicios/supabase_service.dart';
+import '../models/order_status.dart';
 
 class CocinaScreen extends StatefulWidget {
   const CocinaScreen({super.key});
@@ -34,206 +10,141 @@ class CocinaScreen extends StatefulWidget {
 }
 
 class _CocinaScreenState extends State<CocinaScreen> {
-  List<Order> orders = [
-    Order(
-      id: '001',
-      tableNumber: 1,
-      waiter: 'Carlos',
-      items: [
-        OrderItem(name: 'Lomo Saltado', quantity: 2),
-        OrderItem(name: 'Jugo Natural', quantity: 1),
-      ],
-      timestamp: DateTime.now().subtract(const Duration(minutes: 10)),
-    ),
-    Order(
-      id: '002',
-      tableNumber: 3,
-      waiter: 'Ana',
-      items: [
-        OrderItem(name: 'Ensalada César', quantity: 1),
-      ],
-      timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-    ),
-  ];
+  final _svc = SupabaseService();
+  List<Map<String, dynamic>> pedidos = [];
+  final List<OrderStatus> _statusOptions = OrderStatusMapper.workflow();
 
-  // Cambiar estado del pedido
-  void updateOrderStatus(String orderId, OrderStatus newStatus) {
-    setState(() {
-      final order = orders.firstWhere((o) => o.id == orderId);
-      order.status = newStatus;
-    });
+  @override
+  void initState() {
+    super.initState();
+    _cargarPedidos();
   }
 
-  Color getStatusColor(OrderStatus status) {
-    switch (status) {
-      case OrderStatus.pendiente:
+  Future<void> _cargarPedidos() async {
+    final data = await _svc.fetchAllOrdersWithItems();
+    setState(() => pedidos = data);
+  }
+
+  Future<void> _actualizarEstadoProducto(String itemId, String nuevoEstado) async {
+    try {
+      await _svc.updateProductStatus(itemId, nuevoEstado);
+      await _cargarPedidos();
+      final label = OrderStatusMapper.fromDb(nuevoEstado).label;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("✅ Estado actualizado a '$label'")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Error al actualizar: $e")),
+      );
+    }
+  }
+
+  Color getColor(String status) {
+    final normalized = OrderStatusMapper.normalize(status);
+    switch (normalized) {
+      case 'pendiente':
         return Colors.yellow.shade600;
-      case OrderStatus.enPreparacion:
+      case 'preparacion':
         return Colors.blue.shade600;
-      case OrderStatus.listo:
+      case 'horno':
+        return Colors.orange.shade700;
+      case 'listo':
         return Colors.green.shade600;
-      case OrderStatus.cancelado:
-        return Colors.red.shade600;
+      case 'entregado':
+        return Colors.purple.shade600;
+      default:
+        return Colors.grey;
     }
-  }
-
-  IconData getStatusIcon(OrderStatus status) {
-    switch (status) {
-      case OrderStatus.pendiente:
-        return Icons.access_time;
-      case OrderStatus.enPreparacion:
-        return Icons.kitchen;
-      case OrderStatus.listo:
-        return Icons.check_circle;
-      case OrderStatus.cancelado:
-        return Icons.cancel;
-    }
-  }
-
-  String getElapsedTime(DateTime timestamp) {
-    final diff = DateTime.now().difference(timestamp);
-    return '${diff.inMinutes} min';
   }
 
   @override
   Widget build(BuildContext context) {
-    final pendingOrders =
-        orders.where((o) => o.status == OrderStatus.pendiente).toList();
-    final preparingOrders =
-        orders.where((o) => o.status == OrderStatus.enPreparacion).toList();
-    final readyOrders = orders.where((o) => o.status == OrderStatus.listo).toList();
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Panel del Cocinero"),
+        title: const Text("Panel de Cocina"),
         backgroundColor: Colors.redAccent,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (pendingOrders.isNotEmpty)
-            Section(
-              title: "Pedidos Pendientes",
-              icon: Icons.access_time,
-              orders: pendingOrders,
-              onUpdateStatus: updateOrderStatus,
-              nextStatus: OrderStatus.enPreparacion,
-            ),
-          if (preparingOrders.isNotEmpty)
-            Section(
-              title: "En Preparación",
-              icon: Icons.kitchen,
-              orders: preparingOrders,
-              onUpdateStatus: updateOrderStatus,
-              nextStatus: OrderStatus.listo,
-            ),
-          if (readyOrders.isNotEmpty)
-            Section(
-              title: "Listos para Servir",
-              icon: Icons.check_circle,
-              orders: readyOrders,
-              onUpdateStatus: null, // ya no se puede actualizar
-            ),
-          if (orders.isEmpty)
-            Center(
-              child: Column(
-                children: const [
-                  SizedBox(height: 50),
-                  Icon(Icons.kitchen, size: 80, color: Colors.grey),
-                  SizedBox(height: 20),
-                  Text("No hay pedidos en este momento",
-                      style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            ),
+        actions: [
+          IconButton(onPressed: _cargarPedidos, icon: const Icon(Icons.refresh)),
         ],
       ),
-    );
-  }
-}
-
-class Section extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final List<Order> orders;
-  final void Function(String orderId, OrderStatus status)? onUpdateStatus;
-  final OrderStatus? nextStatus;
-
-  const Section({
-    super.key,
-    required this.title,
-    required this.icon,
-    required this.orders,
-    this.onUpdateStatus,
-    this.nextStatus,
-  });
-
-  Color getStatusColor(OrderStatus status) {
-    switch (status) {
-      case OrderStatus.pendiente:
-        return Colors.yellow.shade600;
-      case OrderStatus.enPreparacion:
-        return Colors.blue.shade600;
-      case OrderStatus.listo:
-        return Colors.green.shade600;
-      case OrderStatus.cancelado:
-        return Colors.red.shade600;
-    }
-  }
-
-  IconData getStatusIcon(OrderStatus status) {
-    switch (status) {
-      case OrderStatus.pendiente:
-        return Icons.access_time;
-      case OrderStatus.enPreparacion:
-        return Icons.kitchen;
-      case OrderStatus.listo:
-        return Icons.check_circle;
-      case OrderStatus.cancelado:
-        return Icons.cancel;
-    }
-  }
-
-  String getElapsedTime(DateTime timestamp) {
-    final diff = DateTime.now().difference(timestamp);
-    return '${diff.inMinutes} min';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, color: Colors.black87),
-            const SizedBox(width: 8),
-            Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Column(
-          children: orders.map((order) {
-            return Card(
-              child: ListTile(
-                leading: Icon(getStatusIcon(order.status), color: getStatusColor(order.status)),
-                title: Text("Pedido #${order.id} - Mesa ${order.tableNumber}"),
-                subtitle: Text(order.items.map((i) => "${i.quantity}x ${i.name}").join(", ") +
-                    " • ${getElapsedTime(order.timestamp)}"),
-                trailing: onUpdateStatus != null && nextStatus != null
-                    ? ElevatedButton(
-                        onPressed: () => onUpdateStatus!(order.id, nextStatus!),
-                        child: Text(nextStatus == OrderStatus.enPreparacion
-                            ? "Iniciar"
-                            : "Marcar listo"),
-                      )
-                    : null,
-              ),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 20),
-      ],
+      body: pedidos.isEmpty
+          ? const Center(
+              child: Text("No hay pedidos pendientes.",
+                  style: TextStyle(fontSize: 18, color: Colors.grey)))
+          : ListView(
+              padding: const EdgeInsets.all(12),
+              children: pedidos.map((pedido) {
+                final items = List<Map<String, dynamic>>.from(pedido['order_items']);
+                final orderStatusValue = OrderStatusMapper.normalize(
+                    pedido['status'] ?? 'pendiente');
+                final orderStatus = OrderStatusMapper.fromDb(orderStatusValue);
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  elevation: 2,
+                  child: ExpansionTile(
+                    title: Text(
+                      "Mesa ${pedido['table_number']} - ${pedido['waiter']}",
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text(
+                      "Total: \$${pedido['total']} • Estado: ${orderStatus.label}",
+                      style: const TextStyle(color: Colors.black54),
+                    ),
+                    children: items.map((item) {
+                      final estado = OrderStatusMapper.normalize(
+                          item['product_status'] ?? 'pendiente');
+                      final statusEnum = OrderStatusMapper.fromDb(estado);
+                      return ListTile(
+                        title: Text("${item['name']} (${item['quantity']}x)"),
+                        subtitle: Row(
+                          children: [
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: getColor(estado),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text('Estado: ${statusEnum.label}'),
+                          ],
+                        ),
+                        trailing: DropdownButtonHideUnderline(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              color: getColor(estado).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: getColor(estado)),
+                            ),
+                            child: DropdownButton<String>(
+                              value: estado,
+                              dropdownColor: Colors.white,
+                              icon: const Icon(Icons.keyboard_arrow_down),
+                              items: _statusOptions
+                                  .map(
+                                    (status) => DropdownMenuItem<String>(
+                                      value: status.toDb(),
+                                      child: Text(status.label),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) {
+                                if (value != null && value != estado) {
+                                  _actualizarEstadoProducto(item['id'], value);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                );
+              }).toList(),
+            ),
     );
   }
 }

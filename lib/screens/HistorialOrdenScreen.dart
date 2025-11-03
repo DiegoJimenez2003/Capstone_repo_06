@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum OrderStatus { pendiente, enPreparacion, listo }
+import '../models/order_status.dart';
 
 class OrderItem {
   final String id;
@@ -54,6 +54,7 @@ class _HistorialOrdenScreenState extends State<HistorialOrdenScreen> {
   String searchDate = '';
   String searchTable = '';
   String statusFilter = 'todos';
+  final List<OrderStatus> _statusOptions = OrderStatusMapper.workflow();
 
   List<Order> get historicalOrders {
     final simulatedOrders = [
@@ -66,7 +67,7 @@ class _HistorialOrdenScreenState extends State<HistorialOrdenScreen> {
           OrderItem(id: '4', name: 'Pollo a la plancha', category: 'plato', price: 25000),
           OrderItem(id: '8', name: 'Jugo de naranja', category: 'bebida', price: 8000),
         ],
-        status: OrderStatus.listo,
+        status: OrderStatus.entregado,
         timestamp: DateTime.now().subtract(const Duration(hours: 2)),
         waiter: 'María García',
         customerGender: 'mujer',
@@ -79,7 +80,7 @@ class _HistorialOrdenScreenState extends State<HistorialOrdenScreen> {
           OrderItem(id: '6', name: 'Pasta carbonara', category: 'plato', price: 22000),
           OrderItem(id: '9', name: 'Agua mineral', category: 'bebida', price: 5000, quantity: 2),
         ],
-        status: OrderStatus.listo,
+        status: OrderStatus.horno,
         timestamp: DateTime.now().subtract(const Duration(hours: 4)),
         waiter: 'Carlos López',
         customerGender: 'hombre',
@@ -94,33 +95,37 @@ class _HistorialOrdenScreenState extends State<HistorialOrdenScreen> {
           order.timestamp.toIso8601String().split('T')[0] == searchDate;
       final matchesTable = searchTable.isEmpty ||
           order.tableNumber.toString().contains(searchTable);
-      final matchesStatus = statusFilter == 'todos' ||
-          (statusFilter == 'pendiente' && order.status == OrderStatus.pendiente) ||
-          (statusFilter == 'en_preparacion' && order.status == OrderStatus.enPreparacion) ||
-          (statusFilter == 'listo' && order.status == OrderStatus.listo);
+      OrderStatus? selectedStatus;
+      if (statusFilter != 'todos') {
+        selectedStatus = OrderStatusMapper.fromDb(statusFilter);
+      }
+      final matchesStatus =
+          selectedStatus == null || order.status == selectedStatus;
       return matchesDate && matchesTable && matchesStatus;
     }).toList();
   }
 
   String getStatusText(OrderStatus status) {
-    switch (status) {
-      case OrderStatus.pendiente:
-        return 'Pendiente';
-      case OrderStatus.enPreparacion:
-        return 'En preparación';
-      case OrderStatus.listo:
-        return 'Completado';
+    if (status == OrderStatus.cancelado) {
+      return 'Cancelado';
     }
+    return status.label;
   }
 
   Color getStatusColor(OrderStatus status) {
     switch (status) {
       case OrderStatus.pendiente:
         return Colors.yellow.shade700;
-      case OrderStatus.enPreparacion:
+      case OrderStatus.preparacion:
         return Colors.blue.shade700;
+      case OrderStatus.horno:
+        return Colors.orange.shade700;
       case OrderStatus.listo:
         return Colors.green.shade700;
+      case OrderStatus.entregado:
+        return Colors.purple.shade700;
+      case OrderStatus.cancelado:
+        return Colors.red.shade700;
     }
   }
 
@@ -160,7 +165,7 @@ class _HistorialOrdenScreenState extends State<HistorialOrdenScreen> {
                 child: Column(
                   children: [
                     Row(
-                      children: [
+                       children: [
                         Expanded(
                           child: TextField(
                             decoration: const InputDecoration(
@@ -185,11 +190,15 @@ class _HistorialOrdenScreenState extends State<HistorialOrdenScreen> {
                         Expanded(
                           child: DropdownButtonFormField<String>(
                             value: statusFilter,
-                            items: const [
-                              DropdownMenuItem(value: 'todos', child: Text('Todos los estados')),
-                              DropdownMenuItem(value: 'pendiente', child: Text('Pendiente')),
-                              DropdownMenuItem(value: 'en_preparacion', child: Text('En preparación')),
-                              DropdownMenuItem(value: 'listo', child: Text('Completado')),
+                            items: [
+                              const DropdownMenuItem(
+                                  value: 'todos', child: Text('Todos los estados')),
+                              ..._statusOptions.map(
+                                (status) => DropdownMenuItem(
+                                  value: status.toDb(),
+                                  child: Text(status.label),
+                                ),
+                              ),
                             ],
                             onChanged: (v) => setState(() => statusFilter = v ?? 'todos'),
                             decoration: const InputDecoration(labelText: 'Estado'),

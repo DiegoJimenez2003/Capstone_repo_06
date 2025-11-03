@@ -14,7 +14,7 @@ class SupabaseService {
     required int total,
     required String status, // 'pendiente', 'listo', etc.
   }) async {
-    final id = DateTime.now().millisecondsSinceEpoch.toString(); // ID simple
+    final id = DateTime.now().millisecondsSinceEpoch.toString();
     final insertPayload = {
       'id': id,
       'table_number': tableNumber,
@@ -52,11 +52,7 @@ class SupabaseService {
       };
     }).toList();
 
-    final result = await _client.from('order_items').insert(withOrderId);
-
-    if (result.error != null) {
-      throw Exception('❌ Error al insertar ítems: ${result.error!.message}');
-    }
+    await _client.from('order_items').insert(withOrderId);
   }
 
   /// =====================
@@ -90,12 +86,103 @@ class SupabaseService {
   }
 
   /// =====================
-  /// 🔹 ACTUALIZAR ESTADO
+  /// 🔹 ACTUALIZAR ESTADO DE PEDIDO
   /// =====================
   Future<void> updateOrderStatus(String orderId, OrderStatus status) async {
     await _client
         .from('orders')
         .update({'status': status.toDb()})
         .eq('id', orderId);
+  }
+
+  /// =====================
+  /// 🔹 OBTENER TODOS LOS PEDIDOS (COCINA)
+  /// =====================
+  Future<List<Map<String, dynamic>>> fetchAllOrdersWithItems() async {
+    final data = await _client
+        .from('orders')
+        .select('''
+          id,
+          table_number,
+          waiter,
+          status,
+          total,
+          order_items (
+            id,
+            name,
+            category,
+            price,
+            quantity,
+            product_status
+          )
+        ''')
+        .order('timestamp', ascending: false);
+
+    return List<Map<String, dynamic>>.from(data);
+  }
+
+  /// =====================
+  /// 🔹 ACTUALIZAR ESTADO DE UN PRODUCTO
+  /// =====================
+  Future<void> updateProductStatus(String itemId, String newStatus) async {
+    final normalizedStatus = OrderStatusMapper.normalize(newStatus);
+
+    final updatedRow = await _client
+        .from('order_items')
+        .update({'product_status': normalizedStatus})
+        .eq('id', itemId)
+        .select('order_id')
+        .maybeSingle();
+
+    if (updatedRow == null || updatedRow['order_id'] == null) {
+      return;
+    }
+
+    final orderId = updatedRow['order_id'] as String;
+
+    final items = await _client
+        .from('order_items')
+        .select('product_status')
+        .eq('order_id', orderId);
+
+    final orderStatus = _determineOrderStatusFromItems(items);
+
+    await updateOrderStatus(orderId, orderStatus);
+  }
+
+  OrderStatus _determineOrderStatusFromItems(dynamic itemsResponse) {
+    final items = List<Map<String, dynamic>>.from(itemsResponse ?? const []);
+    if (items.isEmpty) {
+      return OrderStatus.pendiente;
+    }
+
+    const priorities = {
+      OrderStatus.pendiente: 0,
+      OrderStatus.preparacion: 1,
+      OrderStatus.horno: 2,
+      OrderStatus.listo: 3,
+      OrderStatus.entregado: 4,
+    };
+
+    var minPriority = 999;
+    OrderStatus? resultingStatus;
+
+    for (final item in items) {
+      final rawStatus = (item['product_status'] as String?) ?? 'pendiente';
+      final normalized = OrderStatusMapper.fromDb(rawStatus);
+
+      if (!priorities.containsKey(normalized)) {
+        continue;
+      }
+
+      final priority = priorities[normalized]!;
+
+      if (priority < minPriority) {
+        minPriority = priority;
+        resultingStatus = normalized;
+      }
+    }
+
+    return resultingStatus ?? OrderStatus.pendiente;
   }
 }
