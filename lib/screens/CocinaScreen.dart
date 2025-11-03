@@ -12,7 +12,11 @@ class CocinaScreen extends StatefulWidget {
 class _CocinaScreenState extends State<CocinaScreen> {
   final _svc = SupabaseService();
   List<Map<String, dynamic>> pedidos = [];
-  final List<OrderStatus> _statusOptions = OrderStatusMapper.workflow();
+
+  // Solo hasta "listo"
+  final List<OrderStatus> _statusOptions = OrderStatusMapper.workflow()
+      .where((s) => s != OrderStatus.entregado && s != OrderStatus.cancelado)
+      .toList();
 
   @override
   void initState() {
@@ -70,15 +74,19 @@ class _CocinaScreenState extends State<CocinaScreen> {
       ),
       body: pedidos.isEmpty
           ? const Center(
-              child: Text("No hay pedidos pendientes.",
-                  style: TextStyle(fontSize: 18, color: Colors.grey)))
+              child: Text(
+                "No hay pedidos pendientes.",
+                style: TextStyle(fontSize: 18, color: Colors.grey),
+              ),
+            )
           : ListView(
               padding: const EdgeInsets.all(12),
               children: pedidos.map((pedido) {
                 final items = List<Map<String, dynamic>>.from(pedido['order_items']);
-                final orderStatusValue = OrderStatusMapper.normalize(
-                    pedido['status'] ?? 'pendiente');
+                final orderStatusValue =
+                    OrderStatusMapper.normalize(pedido['status'] ?? 'pendiente');
                 final orderStatus = OrderStatusMapper.fromDb(orderStatusValue);
+
                 return Card(
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   elevation: 2,
@@ -95,6 +103,16 @@ class _CocinaScreenState extends State<CocinaScreen> {
                       final estado = OrderStatusMapper.normalize(
                           item['product_status'] ?? 'pendiente');
                       final statusEnum = OrderStatusMapper.fromDb(estado);
+
+                      // Filtramos los estados permitidos para el dropdown
+                      final allowedStatuses = _statusOptions;
+
+                      // Evita el error si el valor actual no está en allowedStatuses
+                      final safeValue = allowedStatuses
+                              .any((s) => s.toDb() == estado)
+                          ? estado
+                          : null;
+
                       return ListTile(
                         title: Text("${item['name']} (${item['quantity']}x)"),
                         subtitle: Row(
@@ -111,34 +129,44 @@ class _CocinaScreenState extends State<CocinaScreen> {
                             Text('Estado: ${statusEnum.label}'),
                           ],
                         ),
-                        trailing: DropdownButtonHideUnderline(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            decoration: BoxDecoration(
-                              color: getColor(estado).withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: getColor(estado)),
-                            ),
-                            child: DropdownButton<String>(
-                              value: estado,
-                              dropdownColor: Colors.white,
-                              icon: const Icon(Icons.keyboard_arrow_down),
-                              items: _statusOptions
-                                  .map(
-                                    (status) => DropdownMenuItem<String>(
-                                      value: status.toDb(),
-                                      child: Text(status.label),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) {
-                                if (value != null && value != estado) {
-                                  _actualizarEstadoProducto(item['id'], value);
-                                }
-                              },
-                            ),
-                          ),
-                        ),
+                        trailing: statusEnum == OrderStatus.entregado
+                            ? const Text(
+                                "Entregado",
+                                style: TextStyle(
+                                    color: Colors.purple,
+                                    fontWeight: FontWeight.bold),
+                              )
+                            : DropdownButtonHideUnderline(
+                                child: Container(
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 8),
+                                  decoration: BoxDecoration(
+                                    color: getColor(estado).withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: getColor(estado)),
+                                  ),
+                                  child: DropdownButton<String>(
+                                    value: safeValue,
+                                    dropdownColor: Colors.white,
+                                    icon:
+                                        const Icon(Icons.keyboard_arrow_down),
+                                    items: allowedStatuses
+                                        .map(
+                                          (status) => DropdownMenuItem<String>(
+                                            value: status.toDb(),
+                                            child: Text(status.label),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (value) {
+                                      if (value != null && value != estado) {
+                                        _actualizarEstadoProducto(
+                                            item['id'], value);
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ),
                       );
                     }).toList(),
                   ),
