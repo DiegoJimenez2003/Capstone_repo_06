@@ -77,41 +77,38 @@ class _MeseroScreenState extends State<MeseroScreen> {
   }
 
   Future<void> _cargarMisPedidos() async {
-  try {
-    final data = await _svc.fetchMyOrdersWithItems(waiterName);
-
-    setState(() {
-      myOrders = data;
-    });
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error al cargar pedidos: $e")),
-      );
+    try {
+      final data = await _svc.fetchMyOrdersWithItems(waiterName);
+      setState(() {
+        myOrders = data;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error al cargar pedidos: $e")),
+        );
+      }
     }
   }
-}
-Future<void> _marcarComoEntregado(String orderId) async {
-  try {
-    await _svc.updateOrderStatus(orderId, OrderStatus.entregado);
 
-    await _cargarMisPedidos(); // recarga la lista después de actualizar
+  Future<void> _marcarComoEntregado(String orderId) async {
+    try {
+      await _svc.updateOrderStatus(orderId, OrderStatus.entregado);
+      await _cargarMisPedidos(); // recarga la lista después de actualizar
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Pedido marcado como entregado")),
-      );
-    }
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error al actualizar: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Pedido marcado como entregado")),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error al actualizar: $e")),
+        );
+      }
     }
   }
-}
-
-
 
   Color getStatusColor(OrderStatus status) {
     switch (status) {
@@ -394,38 +391,37 @@ Future<void> _marcarComoEntregado(String orderId) async {
                               ),
                             ),
                             const SizedBox(height: 6),
-if (status != OrderStatus.entregado)
-  Center(
-    child: ElevatedButton(
-      onPressed: () => _marcarComoEntregado(orderRow['id'].toString()),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color.fromARGB(255, 83, 146, 228),
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8), // 🔹 Bordes redondeados
-        ),
-        minimumSize: const Size(100, 36), // 🔹 Más compacto
-        elevation: 2, // 🔹 Sutil sombra
+                            if (status != OrderStatus.entregado)
+                              Center(
+                                child: ElevatedButton(
+                                  onPressed: () => _marcarComoEntregado(orderRow['id'].toString()),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color.fromARGB(255, 83, 146, 228),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    minimumSize: const Size(100, 36),
+                                    elevation: 2,
+                                  ),
+                                  child: const Text(
+                                    "Entregado",
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+        ],
       ),
-      child: const Text(
-        "Entregado",
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    ),
-  ),
-],
-),
-),
-);
-}).toList(),
-),
-],
-),
-);
+    );
+  }
 }
-}
-
