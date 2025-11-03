@@ -77,9 +77,41 @@ class _MeseroScreenState extends State<MeseroScreen> {
   }
 
   Future<void> _cargarMisPedidos() async {
+  try {
     final data = await _svc.fetchMyOrdersWithItems(waiterName);
-    setState(() => myOrders = data);
+
+    setState(() {
+      myOrders = data;
+    });
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error al cargar pedidos: $e")),
+      );
+    }
   }
+}
+Future<void> _marcarComoEntregado(String orderId) async {
+  try {
+    await _svc.updateOrderStatus(orderId, OrderStatus.entregado);
+
+    await _cargarMisPedidos(); // recarga la lista después de actualizar
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Pedido marcado como entregado")),
+      );
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error al actualizar: $e")),
+      );
+    }
+  }
+}
+
+
 
   Color getStatusColor(OrderStatus status) {
     switch (status) {
@@ -92,18 +124,13 @@ class _MeseroScreenState extends State<MeseroScreen> {
       case OrderStatus.listo:
         return Colors.green.shade600;
       case OrderStatus.entregado:
-        return Colors.purple.shade600;
+        return Color.fromARGB(255, 83, 146, 228);
       case OrderStatus.cancelado:
         return Colors.red.shade600;
     }
   }
 
-  String getStatusText(OrderStatus status) {
-    if (status == OrderStatus.cancelado) {
-      return 'Cancelado';
-    }
-    return status.label;
-  }
+  String getStatusText(OrderStatus status) => status.label;
 
   void addItemToOrder(Map<String, dynamic> item, String category) {
     final idx = currentOrder.indexWhere((i) => i.id == item['id']);
@@ -344,27 +371,61 @@ class _MeseroScreenState extends State<MeseroScreen> {
                     final mesa = "Mesa ${orderRow['table_number']}";
 
                     return Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.restaurant),
-                        title: Text(mesa),
-                        subtitle: Text("${items.length} productos - \$${total.toString()}"),
-                        trailing: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: getStatusColor(status),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            getStatusText(status),
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-        ],
+                      margin: const EdgeInsets.symmetric(vertical: 8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ListTile(
+                              leading: const Icon(Icons.restaurant),
+                              title: Text(mesa),
+                              subtitle: Text("${items.length} productos - \$${total.toString()}"),
+                              trailing: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: getStatusColor(status),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  getStatusText(status),
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+if (status != OrderStatus.entregado)
+  Center(
+    child: ElevatedButton(
+      onPressed: () => _marcarComoEntregado(orderRow['id'].toString()),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color.fromARGB(255, 83, 146, 228),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8), // 🔹 Bordes redondeados
+        ),
+        minimumSize: const Size(100, 36), // 🔹 Más compacto
+        elevation: 2, // 🔹 Sutil sombra
       ),
-    );
-  }
+      child: const Text(
+        "Entregado",
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    ),
+  ),
+],
+),
+),
+);
+}).toList(),
+),
+],
+),
+);
 }
+}
+
