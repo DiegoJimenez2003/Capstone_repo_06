@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+// Importamos Supabase para obtener el ID de usuario
+import 'package:supabase_flutter/supabase_flutter.dart'; 
+
 import '../servicios/supabase_service.dart';
 import '../models/order_status.dart';
 import '../models/mesa_status.dart';
-import '../models/mesa_data.dart'; // Importamos la clase TableData desde mesa_data.dart
+import '../models/mesa_data.dart'; 
 
 class OrderItem {
   final String id;
@@ -31,20 +34,69 @@ class MeseroScreen extends StatefulWidget {
 
 class _MeseroScreenState extends State<MeseroScreen> {
   final _svc = SupabaseService();
-  final String waiterName = 'Mesero1';
+  
+  // Guardaremos el ID del mesero (INTEGER de la tabla 'usuario') y su nombre de sesión (email)
+  int? _currentWaiterId; 
+  String _currentWaiterEmail = '';
 
   List<Map<String, dynamic>> myOrders = [];
   List<OrderItem> currentOrder = [];
-  List<TableData> tables = [];  // Usamos TableData importada desde mesa_data.dart
+  List<TableData> tables = [];  
   int? selectedTable;
   String customerGender = '';
 
   @override
   void initState() {
     super.initState();
-    _cargarMesas();  // Cargar mesas desde la base de datos
-    _cargarMisPedidos();
+    _initializeMeseroData(); 
   }
+
+  // Nueva función para obtener el ID real del mesero y cargar los datos
+  Future<void> _initializeMeseroData() async {
+    // 1. Obtener el usuario autenticado
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null || user.email == null) {
+      if (mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Error: Usuario no autenticado o email no disponible.")),
+        );
+      }
+      return;
+    }
+    
+    _currentWaiterEmail = user.email!;
+
+    try {
+      // 2. Buscar en la tabla 'usuario' usando el email para obtener el id_usuario (INT)
+      final profileData = await _svc.fetchMeseroProfile(_currentWaiterEmail);
+
+      if (profileData == null || profileData['id_usuario'] == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Error: Perfil de mesero no encontrado para ${_currentWaiterEmail}. Asegúrese de que el correo esté en la tabla 'usuario'.")),
+          );
+        }
+        return;
+      }
+
+      // 3. Almacenar el ID INTEGER de la tabla 'usuario'
+      setState(() {
+        _currentWaiterId = profileData['id_usuario'] as int;
+      });
+
+      // 4. Cargar las mesas y pedidos usando el ID REAL
+      await _cargarMesas(); 
+      await _cargarMisPedidos();
+      
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error al inicializar datos: $e")),
+        );
+      }
+    }
+  }
+
 
   final Map<String, List<Map<String, dynamic>>> menuItems = {
     'Entradas': [
@@ -62,11 +114,18 @@ class _MeseroScreenState extends State<MeseroScreen> {
   };
 
   Future<void> _cargarMesas() async {
+    if (_currentWaiterId == null) return; 
     try {
-      final List<TableData> data = await _svc.fetchTables(waiterName);
+      // Usamos el ID INTEGER (_currentWaiterId) para filtrar las mesas.
+      final List<TableData> data = await _svc.fetchTables(_currentWaiterId!); 
       setState(() {
         tables = data;
       });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Mesas cargadas: ${data.length} para ID ${_currentWaiterId}")),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -77,13 +136,17 @@ class _MeseroScreenState extends State<MeseroScreen> {
   }
 
   Future<void> _cargarMisPedidos() async {
+    if (_currentWaiterEmail.isEmpty) return;
+
     try {
-      final data = await _svc.fetchMyOrdersWithItems(waiterName);
+      final data = await _svc.fetchMyOrdersWithItems(_currentWaiterEmail); 
       setState(() {
         myOrders = data;
       });
     } catch (e) {
       if (mounted) {
+        // CORRECCIÓN: Si falla la carga de pedidos, limpiamos la lista
+        myOrders = [];
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error al cargar pedidos: $e")),
         );
@@ -96,27 +159,90 @@ class _MeseroScreenState extends State<MeseroScreen> {
       TableStatus status = TableStatusMapper.fromDb(newStatus);
       await _svc.updateTableStatus(tableId, status);
       await _cargarMesas();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Mesa actualizada")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Mesa actualizada")),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error al actualizar mesa: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error al actualizar mesa: $e")),
+        );
+      }
     }
   }
 
   Future<void> _marcarComoEntregado(String orderId) async {
     try {
       await _svc.updateOrderStatus(orderId, OrderStatus.entregado);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Pedido marcado como entregado")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Pedido marcado como entregado")),
+        );
+      }
       await _cargarMisPedidos();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error al marcar como entregado: $e")),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error al marcar como entregado: $e")),
+        );
+      }
+    }
+  }
+
+  // Corregimos la función submitOrder para usar el email del mesero
+  Future<void> submitOrder() async {
+    if (selectedTable == null || currentOrder.isEmpty || customerGender.isEmpty || _currentWaiterEmail.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("⚠️ Completa todos los datos y asegúrate de que el mesero esté cargado.")),
+        );
+      }
+      return;
+    }
+
+    try {
+      final total = currentOrder.fold<int>(0, (sum, i) => sum + i.price * i.quantity);
+      final orderId = await _svc.createOrder(
+        tableNumber: selectedTable!,
+        waiter: _currentWaiterEmail, // Usar el email del mesero autenticado
+        customerGender: customerGender.toLowerCase(),
+        total: total,
+        status: OrderStatus.pendiente.toDb(),
       );
+
+      final itemsRows = currentOrder.map((i) {
+        return {
+          'name': i.name,
+          'category': i.category,
+          'price': i.price,
+          'quantity': i.quantity,
+          'product_status': 'pendiente',
+        };
+      }).toList();
+
+      await _svc.addOrderItems(orderId, itemsRows);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("✅ Pedido enviado con éxito")),
+        );
+      }
+
+      setState(() {
+        currentOrder.clear();
+        selectedTable = null;
+        customerGender = '';
+      });
+
+      await _cargarMisPedidos();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("❌ Error al crear pedido: $e")),
+        );
+      }
     }
   }
 
@@ -131,7 +257,7 @@ class _MeseroScreenState extends State<MeseroScreen> {
       case OrderStatus.listo:
         return Colors.green.shade600;
       case OrderStatus.entregado:
-        return Color.fromARGB(255, 83, 146, 228);
+        return const Color.fromARGB(255, 83, 146, 228);
       case OrderStatus.cancelado:
         return Colors.red.shade600;
     }
@@ -164,63 +290,17 @@ class _MeseroScreenState extends State<MeseroScreen> {
       }
     });
   }
-
-  Future<void> submitOrder() async {
-    if (selectedTable == null || currentOrder.isEmpty || customerGender.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("⚠️ Completa todos los datos antes de enviar.")),
-      );
-      return;
-    }
-
-    try {
-      final total = currentOrder.fold<int>(0, (sum, i) => sum + i.price * i.quantity);
-      final orderId = await _svc.createOrder(
-        tableNumber: selectedTable!,
-        waiter: waiterName,
-        customerGender: customerGender.toLowerCase(),
-        total: total,
-        status: OrderStatus.pendiente.toDb(),
-      );
-
-      final itemsRows = currentOrder.map((i) {
-        return {
-          'name': i.name,
-          'category': i.category,
-          'price': i.price,
-          'quantity': i.quantity,
-          'product_status': 'pendiente',
-        };
-      }).toList();
-
-      await _svc.addOrderItems(orderId, itemsRows);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("✅ Pedido enviado con éxito")),
-      );
-
-      setState(() {
-        currentOrder.clear();
-        selectedTable = null;
-        customerGender = '';
-      });
-
-      await _cargarMisPedidos();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("❌ Error al crear pedido: $e")),
-      );
-    }
-  }
-
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Panel del Mesero"),
+        // Mostramos el email en la barra para debug y confirmación
+        title: Text("Panel del Mesero (${_currentWaiterEmail})"),
         backgroundColor: Colors.orangeAccent,
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _cargarMisPedidos),
+          // Al presionar refresh, inicializamos de nuevo para obtener el ID y las mesas
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _initializeMeseroData),
         ],
       ),
       body: ListView(
@@ -229,140 +309,144 @@ class _MeseroScreenState extends State<MeseroScreen> {
           const Text("Mesas Disponibles:",
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 2,
-            ),
-            itemCount: tables.length,
-            itemBuilder: (context, index) {
-              final table = tables[index];
-              return ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: table.status == 'ocupada' ? Colors.grey : Colors.white,
-                  foregroundColor: Colors.black,
-                  side: table.status == 'ocupada' ? null : const BorderSide(color: Colors.orange),
-                ),
-                onPressed: table.status == 'ocupada'
-                    ? null
-                    : () {
-                        selectedTable = table.number;
-                        currentOrder.clear();
-                        customerGender = '';
-                        showDialog(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (_) => StatefulBuilder(
-                            builder: (context, setDialogState) {
-                              return AlertDialog(
-                                title: Text('Nuevo Pedido - Mesa ${table.number}'),
-                                content: SizedBox(
-                                  width: double.maxFinite,
-                                  height: 400,
-                                  child: Column(
-                                    children: [
-                                      DropdownButton<String>(
-                                        value: customerGender.isEmpty ? null : customerGender,
-                                        hint: const Text('Selecciona género del cliente'),
-                                        items: const ['Hombre', 'Mujer']
-                                            .map((g) => DropdownMenuItem(value: g, child: Text(g)))
-                                            .toList(),
-                                        onChanged: (v) => setDialogState(() {
-                                          customerGender = v ?? '';
-                                        }),
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Expanded(
-                                        child: ListView(
-                                          children: menuItems.entries.map((entry) {
-                                            return ExpansionTile(
-                                              title: Text(entry.key.toUpperCase()),
-                                              children: entry.value.map((item) {
-                                                return ListTile(
-                                                  title: Text(item['name']),
-                                                  subtitle: Text('\$${item['price']}'),
-                                                  trailing: IconButton(
-                                                    icon: const Icon(Icons.add),
-                                                    onPressed: () {
-                                                      setDialogState(() {
-                                                        addItemToOrder(item, entry.key);
-                                                      });
-                                                    },
-                                                  ),
-                                                );
-                                              }).toList(),
-                                            );
-                                          }).toList(),
+          // Si _currentWaiterId es null, mostramos un indicador de carga
+          if (_currentWaiterId == null && tables.isEmpty) 
+            const Center(child: CircularProgressIndicator()) 
+          else 
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 2,
+              ),
+              itemCount: tables.length,
+              itemBuilder: (context, index) {
+                final table = tables[index];
+                return ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: table.status == 'ocupada' ? Colors.grey : Colors.white,
+                    foregroundColor: Colors.black,
+                    side: table.status == 'ocupada' ? null : const BorderSide(color: Colors.orange),
+                  ),
+                  onPressed: table.status == 'ocupada'
+                      ? null
+                      : () {
+                          selectedTable = table.number;
+                          currentOrder.clear();
+                          customerGender = '';
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (_) => StatefulBuilder(
+                              builder: (context, setDialogState) {
+                                return AlertDialog(
+                                  title: Text('Nuevo Pedido - Mesa ${table.number}'),
+                                  content: SizedBox(
+                                    width: double.maxFinite,
+                                    height: 400,
+                                    child: Column(
+                                      children: [
+                                        DropdownButton<String>(
+                                          value: customerGender.isEmpty ? null : customerGender,
+                                          hint: const Text('Selecciona género del cliente'),
+                                          items: const ['Hombre', 'Mujer']
+                                              .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                                              .toList(),
+                                          onChanged: (v) => setDialogState(() {
+                                            customerGender = v ?? '';
+                                          }),
                                         ),
-                                      ),
-                                      const Divider(),
-                                      if (currentOrder.isNotEmpty)
+                                        const SizedBox(height: 10),
                                         Expanded(
                                           child: ListView(
-                                            children: currentOrder.map((item) {
-                                              return ListTile(
-                                                title: Text("${item.name} x${item.quantity}"),
-                                                trailing: Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    IconButton(
-                                                      icon: const Icon(Icons.remove),
-                                                      onPressed: () =>
-                                                          setDialogState(() => removeItemFromOrder(item)),
-                                                    ),
-                                                    IconButton(
+                                            children: menuItems.entries.map((entry) {
+                                              return ExpansionTile(
+                                                title: Text(entry.key.toUpperCase()),
+                                                children: entry.value.map((item) {
+                                                  return ListTile(
+                                                    title: Text(item['name']),
+                                                    subtitle: Text('\$${item['price']}'),
+                                                    trailing: IconButton(
                                                       icon: const Icon(Icons.add),
-                                                      onPressed: () =>
-                                                          setDialogState(() => addItemToOrder({
-                                                                'id': item.id,
-                                                                'name': item.name,
-                                                                'price': item.price
-                                                              }, item.category)),
+                                                      onPressed: () {
+                                                        setDialogState(() {
+                                                          addItemToOrder(item, entry.key);
+                                                        });
+                                                      },
                                                     ),
-                                                  ],
-                                                ),
+                                                  );
+                                                }).toList(),
                                               );
                                             }).toList(),
                                           ),
                                         ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        "Total: \$${currentOrder.fold<int>(0, (s, i) => s + i.price * i.quantity)}",
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold, fontSize: 18),
-                                      ),
-                                    ],
+                                        const Divider(),
+                                        if (currentOrder.isNotEmpty)
+                                          Expanded(
+                                            child: ListView(
+                                              children: currentOrder.map((item) {
+                                                return ListTile(
+                                                  title: Text("${item.name} x${item.quantity}"),
+                                                  trailing: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      IconButton(
+                                                        icon: const Icon(Icons.remove),
+                                                        onPressed: () =>
+                                                            setDialogState(() => removeItemFromOrder(item)),
+                                                      ),
+                                                      IconButton(
+                                                        icon: const Icon(Icons.add),
+                                                        onPressed: () =>
+                                                            setDialogState(() => addItemToOrder({
+                                                                  'id': item.id,
+                                                                  'name': item.name,
+                                                                  'price': item.price
+                                                                }, item.category)),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              }).toList(),
+                                            ),
+                                          ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          "Total: \$${currentOrder.fold<int>(0, (s, i) => s + i.price * i.quantity)}",
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold, fontSize: 18),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                actions: [
-                                  TextButton(
-                                      onPressed: () {
-                                        Navigator.of(context).pop();
-                                      },
-                                      child: const Text('Cancelar')),
-                                  ElevatedButton(
-                                    onPressed: customerGender.isEmpty || currentOrder.isEmpty
-                                        ? null
-                                        : () async {
-                                            await submitOrder();
-                                            if (mounted) Navigator.of(context).pop();
-                                          },
-                                    child: const Text('Enviar'),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        );
-                      },
-                child: Text('Mesa ${table.number}'),
-              );
-            },
-          ),
+                                  actions: [
+                                    TextButton(
+                                        onPressed: () {
+                                          Navigator.of(context).pop();
+                                        },
+                                        child: const Text('Cancelar')),
+                                    ElevatedButton(
+                                      onPressed: customerGender.isEmpty || currentOrder.isEmpty
+                                          ? null
+                                          : () async {
+                                              await submitOrder();
+                                              if (mounted) Navigator.of(context).pop();
+                                            },
+                                      child: const Text('Enviar'),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          );
+                        },
+                  child: Text('Mesa ${table.number}'),
+                );
+              },
+            ),
           const SizedBox(height: 20),
           const Text("Mis Pedidos:",
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
@@ -371,10 +455,12 @@ class _MeseroScreenState extends State<MeseroScreen> {
               ? const Center(child: Text("No tienes pedidos activos"))
               : Column(
                   children: myOrders.map((orderRow) {
-                    final status = OrderStatusMapper.fromDb(orderRow['status'] as String);
+                    // CORRECCIÓN CLAVE: Aseguramos que 'status' sea String antes de usarlo
+                    final status = OrderStatusMapper.fromDb(orderRow['status']?.toString() ?? 'pendiente');
                     final total = (orderRow['total'] as num?)?.toInt() ?? 0;
-                    final items =
-                        List<Map<String, dynamic>>.from(orderRow['order_items'] ?? const []); 
+                    
+                    // Aseguramos que order_items no sea nulo y sea una lista válida
+                    final items = List<Map<String, dynamic>>.from(orderRow['order_items'] ?? const []); 
                     final mesa = "Mesa ${orderRow['table_number']}";
 
                     return Card(
@@ -404,7 +490,7 @@ class _MeseroScreenState extends State<MeseroScreen> {
                             if (status != OrderStatus.entregado)
                               Center(
                                 child: ElevatedButton(
-                                  onPressed: () => _marcarComoEntregado(orderRow['id'].toString()),
+                                  onPressed: () => _marcarComoEntregado(orderRow['id']?.toString() ?? ''),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color.fromARGB(255, 83, 146, 228),
                                     foregroundColor: Colors.white,

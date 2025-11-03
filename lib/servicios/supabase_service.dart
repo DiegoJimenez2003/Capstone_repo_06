@@ -7,6 +7,24 @@ class SupabaseService {
   SupabaseClient get _client => Supabase.instance.client;
 
   /// =====================
+  /// 🔹 OBTENER DATOS DE USUARIO DESDE LA TABLA 'usuario'
+  ///    Usa el EMAIL de autenticación para obtener el ID de tu tabla (INTEGER).
+  /// =====================
+  Future<Map<String, dynamic>?> fetchMeseroProfile(String email) async {
+    // Buscamos en la tabla 'usuario' donde el 'correo' coincida con el email del usuario
+    final data = await _client
+        .from('usuario')
+        .select('id_usuario, nombre, correo, id_rol') 
+        .eq('correo', email) // Filtramos por la columna 'correo' de tu tabla
+        .maybeSingle();
+
+    if (data == null) {
+      return null;
+    }
+    return data;
+  }
+  
+  /// =====================
   /// 🔹 CREAR PEDIDO
   /// =====================
   Future<String> createOrder({
@@ -58,10 +76,10 @@ class SupabaseService {
   }
 
   /// =====================
-  /// 🔹 OBTENER PEDIDOS DEL MESERO
+  /// 🔹 OBTENER PEDIDOS DEL MESERO (Filtrado por EMAIL/NOMBRE)
   /// =====================
   Future<List<Map<String, dynamic>>> fetchMyOrdersWithItems(
-      String waiter) async {
+      String waiterEmail) async {
     final data = await _client
         .from('orders')
         .select(''' 
@@ -81,7 +99,7 @@ class SupabaseService {
             product_status
           )
         ''')
-        .eq('waiter', waiter)
+        .eq('waiter', waiterEmail) // Filtra por el email/nombre del mesero almacenado en 'waiter'
         .order('timestamp', ascending: false);
 
     return List<Map<String, dynamic>>.from(data);
@@ -189,15 +207,15 @@ class SupabaseService {
   }
 
   /// =====================
-  /// 🔹 OBTENER MESAS
+  /// 🔹 OBTENER MESAS (Filtrado por ID_MESERO INTEGER)
   /// =====================
-  Future<List<TableData>> fetchTables(String waiter) async {
+  Future<List<TableData>> fetchTables(int waiterId) async { 
   try {
     final data = await _client
         .from('mesa')  // Nombre de la tabla
         .select()
-        .eq('id_mesero', waiter)  // Filtrar por mesero si es necesario
-        .order('numero', ascending: true);  // Asegúrate de que el campo sea 'numero' en lugar de 'numero_mesa'
+        .eq('id_mesero', waiterId)  // Filtramos por el ID_MESERO INTEGER
+        .order('numero_mesa', ascending: true); // Asegúrate que es 'numero_mesa'
 
     // Agregar un print para inspeccionar los datos
     print("Mesas obtenidas: $data");
@@ -205,10 +223,12 @@ class SupabaseService {
     // Mapeamos los datos a objetos TableData
     final List<TableData> tables = List<TableData>.from(
       data.map((mesa) => TableData(
-        id: mesa['id'] as int,  // Cambiar 'id' según tu base de datos
-        number: mesa['numero'] as int,  // Cambiar 'numero' según tu base de datos
-        status: mesa['estado'] as String,  // Cambiar 'estado' según tu base de datos
-        capacity: mesa['capacidad'] as int,  // Cambiar 'capacidad' según tu base de datos
+        id: mesa['id_mesa'] as int,  // Cambiar a 'id_mesa'
+        number: mesa['numero_mesa'] as int,  // Cambiar a 'numero_mesa'
+        status: mesa['estado'] as String,  // Mantiene 'estado'
+        capacity: mesa['capacidad'] as int,  // Mantiene 'capacidad'
+        // El campo 'waiter' en el modelo TableData espera un String, 
+        // pero aquí solo tenemos el ID. Por simplicidad, usamos el ID convertido a String.
         waiter: mesa['id_mesero'] != null ? "Mesero ${mesa['id_mesero']}" : null,
         waiterId: mesa['id_mesero'] as int?,
       )),
@@ -221,7 +241,6 @@ class SupabaseService {
 }
 
 
-
   /// =====================
   /// 🔹 ACTUALIZAR ESTADO DE LA MESA
   /// =====================
@@ -230,7 +249,7 @@ class SupabaseService {
       await _client
           .from('mesa')
           .update({'estado': status.toDb()})  // Convertir el enum a texto
-          .eq('id_mesa', tableId);
+          .eq('id_mesa', tableId); // Usar 'id_mesa' para el filtro
     } catch (e) {
       rethrow;
     }
