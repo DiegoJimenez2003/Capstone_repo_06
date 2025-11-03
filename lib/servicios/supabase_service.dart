@@ -64,7 +64,7 @@ class SupabaseService {
       String waiter) async {
     final data = await _client
         .from('orders')
-        .select('''
+        .select(''' 
           id,
           table_number,
           waiter,
@@ -103,7 +103,7 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> fetchAllOrdersWithItems() async {
     final data = await _client
         .from('orders')
-        .select('''
+        .select(''' 
           id,
           table_number,
           waiter,
@@ -192,30 +192,35 @@ class SupabaseService {
   /// 🔹 OBTENER MESAS
   /// =====================
   Future<List<TableData>> fetchTables(String waiter) async {
-    try {
-      final data = await _client
-          .from('mesa')
-          .select()
-          .eq('id_mesero', waiter)  // Si deseas filtrar por mesero
-          .order('numero_mesa', ascending: true);
+  try {
+    final data = await _client
+        .from('mesa')  // Nombre de la tabla
+        .select()
+        .eq('id_mesero', waiter)  // Filtrar por mesero si es necesario
+        .order('numero', ascending: true);  // Asegúrate de que el campo sea 'numero' en lugar de 'numero_mesa'
 
-      // Convertir los datos a objetos TableData
-      final List<TableData> tables = List<TableData>.from(
-        data.map((mesa) => TableData(
-          id: mesa['id'] as int,
-          number: mesa['numero_mesa'] as int,
-          status: TableStatusMapper.fromDb(mesa['estado'] as String),
-          capacity: mesa['capacidad'] as int,
-          waiter: mesa['id_mesero'] != null ? "Mesero ${mesa['id_mesero']}" : null,
-          waiterId: mesa['id_mesero'] as int?,
-        )),
-      );
+    // Agregar un print para inspeccionar los datos
+    print("Mesas obtenidas: $data");
 
-      return tables;
-    } catch (e) {
-      rethrow;
-    }
+    // Mapeamos los datos a objetos TableData
+    final List<TableData> tables = List<TableData>.from(
+      data.map((mesa) => TableData(
+        id: mesa['id'] as int,  // Cambiar 'id' según tu base de datos
+        number: mesa['numero'] as int,  // Cambiar 'numero' según tu base de datos
+        status: mesa['estado'] as String,  // Cambiar 'estado' según tu base de datos
+        capacity: mesa['capacidad'] as int,  // Cambiar 'capacidad' según tu base de datos
+        waiter: mesa['id_mesero'] != null ? "Mesero ${mesa['id_mesero']}" : null,
+        waiterId: mesa['id_mesero'] as int?,
+      )),
+    );
+
+    return tables;
+  } catch (e) {
+    rethrow;  // Propagar el error para que pueda ser manejado en la UI
   }
+}
+
+
 
   /// =====================
   /// 🔹 ACTUALIZAR ESTADO DE LA MESA
@@ -224,7 +229,7 @@ class SupabaseService {
     try {
       await _client
           .from('mesa')
-          .update({'estado': status.toDb()})
+          .update({'estado': status.toDb()})  // Convertir el enum a texto
           .eq('id_mesa', tableId);
     } catch (e) {
       rethrow;

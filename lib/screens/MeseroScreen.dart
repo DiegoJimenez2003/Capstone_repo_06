@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../servicios/supabase_service.dart';
 import '../models/order_status.dart';
+import '../models/mesa_status.dart';
+import '../models/mesa_data.dart'; // Importamos la clase TableData desde mesa_data.dart
 
 class OrderItem {
   final String id;
@@ -20,24 +22,6 @@ class OrderItem {
   });
 }
 
-class TableData {
-  final int id;
-  final int number;
-  final String status;  // estado de la mesa: libre, ocupada, reservada
-  final int capacity;
-  final String? waiter;  // Nombre del mesero asignado
-  final int? waiterId;  // ID del mesero asignado (vinculado a usuario)
-
-  TableData({
-    required this.id,
-    required this.number,
-    required this.status,
-    required this.capacity,
-    this.waiter,
-    this.waiterId,
-  });
-}
-
 class MeseroScreen extends StatefulWidget {
   const MeseroScreen({super.key});
 
@@ -49,13 +33,19 @@ class _MeseroScreenState extends State<MeseroScreen> {
   final _svc = SupabaseService();
   final String waiterName = 'Mesero1';
 
-  List<TableData> tables = [];
   List<Map<String, dynamic>> myOrders = [];
   List<OrderItem> currentOrder = [];
+  List<TableData> tables = [];  // Usamos TableData importada desde mesa_data.dart
   int? selectedTable;
   String customerGender = '';
 
-  // Aquí definimos el menú (simplificado para demostración)
+  @override
+  void initState() {
+    super.initState();
+    _cargarMesas();  // Cargar mesas desde la base de datos
+    _cargarMisPedidos();
+  }
+
   final Map<String, List<Map<String, dynamic>>> menuItems = {
     'Entradas': [
       {'id': '1', 'name': 'Ensalada', 'price': 5000},
@@ -71,17 +61,9 @@ class _MeseroScreenState extends State<MeseroScreen> {
     ],
   };
 
-  @override
-  void initState() {
-    super.initState();
-    _cargarMesas();  // Cargar mesas desde la base de datos
-    _cargarMisPedidos();
-  }
-
-  // Cargar mesas desde la base de datos
   Future<void> _cargarMesas() async {
     try {
-      final data = await _svc.fetchTables(waiterName);
+      final List<TableData> data = await _svc.fetchTables(waiterName);
       setState(() {
         tables = data;
       });
@@ -109,11 +91,11 @@ class _MeseroScreenState extends State<MeseroScreen> {
     }
   }
 
-  // Cambiar el estado de una mesa a "ocupada"
   Future<void> _actualizarEstadoMesa(int tableId, String newStatus) async {
     try {
-      await _svc.updateTableStatus(tableId, newStatus);
-      await _cargarMesas();  // recargar mesas después de la actualización
+      TableStatus status = TableStatusMapper.fromDb(newStatus);
+      await _svc.updateTableStatus(tableId, status);
+      await _cargarMesas();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Mesa actualizada")),
       );
@@ -124,15 +106,12 @@ class _MeseroScreenState extends State<MeseroScreen> {
     }
   }
 
-  // Función para marcar un pedido como "Entregado"
   Future<void> _marcarComoEntregado(String orderId) async {
     try {
-      // Actualizamos el estado del pedido
       await _svc.updateOrderStatus(orderId, OrderStatus.entregado);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Pedido marcado como entregado")),
       );
-      // Recargamos los pedidos
       await _cargarMisPedidos();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -286,10 +265,95 @@ class _MeseroScreenState extends State<MeseroScreen> {
                                   height: 400,
                                   child: Column(
                                     children: [
-                                      DropdownButton<String>( ... )
+                                      DropdownButton<String>(
+                                        value: customerGender.isEmpty ? null : customerGender,
+                                        hint: const Text('Selecciona género del cliente'),
+                                        items: const ['Hombre', 'Mujer']
+                                            .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                                            .toList(),
+                                        onChanged: (v) => setDialogState(() {
+                                          customerGender = v ?? '';
+                                        }),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Expanded(
+                                        child: ListView(
+                                          children: menuItems.entries.map((entry) {
+                                            return ExpansionTile(
+                                              title: Text(entry.key.toUpperCase()),
+                                              children: entry.value.map((item) {
+                                                return ListTile(
+                                                  title: Text(item['name']),
+                                                  subtitle: Text('\$${item['price']}'),
+                                                  trailing: IconButton(
+                                                    icon: const Icon(Icons.add),
+                                                    onPressed: () {
+                                                      setDialogState(() {
+                                                        addItemToOrder(item, entry.key);
+                                                      });
+                                                    },
+                                                  ),
+                                                );
+                                              }).toList(),
+                                            );
+                                          }).toList(),
+                                        ),
+                                      ),
+                                      const Divider(),
+                                      if (currentOrder.isNotEmpty)
+                                        Expanded(
+                                          child: ListView(
+                                            children: currentOrder.map((item) {
+                                              return ListTile(
+                                                title: Text("${item.name} x${item.quantity}"),
+                                                trailing: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    IconButton(
+                                                      icon: const Icon(Icons.remove),
+                                                      onPressed: () =>
+                                                          setDialogState(() => removeItemFromOrder(item)),
+                                                    ),
+                                                    IconButton(
+                                                      icon: const Icon(Icons.add),
+                                                      onPressed: () =>
+                                                          setDialogState(() => addItemToOrder({
+                                                                'id': item.id,
+                                                                'name': item.name,
+                                                                'price': item.price
+                                                              }, item.category)),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        "Total: \$${currentOrder.fold<int>(0, (s, i) => s + i.price * i.quantity)}",
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold, fontSize: 18),
+                                      ),
                                     ],
                                   ),
                                 ),
+                                actions: [
+                                  TextButton(
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                      },
+                                      child: const Text('Cancelar')),
+                                  ElevatedButton(
+                                    onPressed: customerGender.isEmpty || currentOrder.isEmpty
+                                        ? null
+                                        : () async {
+                                            await submitOrder();
+                                            if (mounted) Navigator.of(context).pop();
+                                          },
+                                    child: const Text('Enviar'),
+                                  ),
+                                ],
                               );
                             },
                           ),
@@ -310,7 +374,7 @@ class _MeseroScreenState extends State<MeseroScreen> {
                     final status = OrderStatusMapper.fromDb(orderRow['status'] as String);
                     final total = (orderRow['total'] as num?)?.toInt() ?? 0;
                     final items =
-                        List<Map<String, dynamic>>.from(orderRow['order_items'] ?? const []);
+                        List<Map<String, dynamic>>.from(orderRow['order_items'] ?? const []); 
                     final mesa = "Mesa ${orderRow['table_number']}";
 
                     return Card(
