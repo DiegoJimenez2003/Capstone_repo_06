@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/order_status.dart';
+import '../models/mesa_status.dart'; 
 
 class SupabaseService {
   SupabaseClient get _client => Supabase.instance.client;
@@ -184,5 +185,38 @@ class SupabaseService {
     }
 
     return resultingStatus ?? OrderStatus.pendiente;
+  }
+
+  /// =====================
+  /// 🔹 OBTENER MESAS
+  /// =====================
+  Future<List<Map<String, dynamic>>> fetchTables(String waiter) async {
+    final data = await _client
+        .from('mesa')
+        .select()
+        .eq('id_mesero', waiter)  // Si deseas filtrar por mesero
+        .order('numero_mesa', ascending: true);
+
+    return List<Map<String, dynamic>>.from(data);
+  }
+
+  /// =====================
+  /// 🔹 ACTUALIZAR ESTADO DE LA MESA
+  /// =====================
+  Future<void> updateTableStatus(int tableId, TableStatus status) async {
+    await _client
+        .from('mesa')
+        .update({'estado': status.toDb()})
+        .eq('id_mesa', tableId);
+  }
+
+  /// =====================
+  /// 🔹 ASIGNAR MESERO A UNA MESA
+  /// =====================
+  Future<void> assignWaiterToTable(int tableId, int waiterId) async {
+    await _client
+        .from('mesa')
+        .update({'id_mesero': waiterId})
+        .eq('id_mesa', tableId);
   }
 }
