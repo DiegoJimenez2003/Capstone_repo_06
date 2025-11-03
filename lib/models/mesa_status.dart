@@ -23,7 +23,7 @@ extension TableStatusMapper on TableStatus {
       case 'reservada':
         return TableStatus.reservada;
       default:
-        return TableStatus.libre; // Valor por defecto
+        return TableStatus.libre; // Valor por defecto si el estado no es reconocido
     }
   }
 

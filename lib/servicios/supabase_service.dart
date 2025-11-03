@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/order_status.dart';
 import '../models/mesa_status.dart'; 
+import '../models/mesa_data.dart'; 
 
 class SupabaseService {
   SupabaseClient get _client => Supabase.instance.client;
@@ -190,24 +191,44 @@ class SupabaseService {
   /// =====================
   /// 🔹 OBTENER MESAS
   /// =====================
-  Future<List<Map<String, dynamic>>> fetchTables(String waiter) async {
-    final data = await _client
-        .from('mesa')
-        .select()
-        .eq('id_mesero', waiter)  // Si deseas filtrar por mesero
-        .order('numero_mesa', ascending: true);
+  Future<List<TableData>> fetchTables(String waiter) async {
+    try {
+      final data = await _client
+          .from('mesa')
+          .select()
+          .eq('id_mesero', waiter)  // Si deseas filtrar por mesero
+          .order('numero_mesa', ascending: true);
 
-    return List<Map<String, dynamic>>.from(data);
+      // Convertir los datos a objetos TableData
+      final List<TableData> tables = List<TableData>.from(
+        data.map((mesa) => TableData(
+          id: mesa['id'] as int,
+          number: mesa['numero_mesa'] as int,
+          status: TableStatusMapper.fromDb(mesa['estado'] as String),
+          capacity: mesa['capacidad'] as int,
+          waiter: mesa['id_mesero'] != null ? "Mesero ${mesa['id_mesero']}" : null,
+          waiterId: mesa['id_mesero'] as int?,
+        )),
+      );
+
+      return tables;
+    } catch (e) {
+      rethrow;
+    }
   }
 
   /// =====================
   /// 🔹 ACTUALIZAR ESTADO DE LA MESA
   /// =====================
   Future<void> updateTableStatus(int tableId, TableStatus status) async {
-    await _client
-        .from('mesa')
-        .update({'estado': status.toDb()})
-        .eq('id_mesa', tableId);
+    try {
+      await _client
+          .from('mesa')
+          .update({'estado': status.toDb()})
+          .eq('id_mesa', tableId);
+    } catch (e) {
+      rethrow;
+    }
   }
 
   /// =====================

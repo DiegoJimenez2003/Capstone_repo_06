@@ -21,16 +21,20 @@ class OrderItem {
 }
 
 class TableData {
+  final int id;
   final int number;
-  final bool occupied;
-  final String? waiter;
-  final List<int>? groupedWith;
+  final String status;  // estado de la mesa: libre, ocupada, reservada
+  final int capacity;
+  final String? waiter;  // Nombre del mesero asignado
+  final int? waiterId;  // ID del mesero asignado (vinculado a usuario)
 
   TableData({
+    required this.id,
     required this.number,
-    this.occupied = false,
+    required this.status,
+    required this.capacity,
     this.waiter,
-    this.groupedWith,
+    this.waiterId,
   });
 }
 
@@ -45,35 +49,49 @@ class _MeseroScreenState extends State<MeseroScreen> {
   final _svc = SupabaseService();
   final String waiterName = 'Mesero1';
 
-  List<TableData> tables = List.generate(6, (index) => TableData(number: index + 1));
+  List<TableData> tables = [];
   List<Map<String, dynamic>> myOrders = [];
   List<OrderItem> currentOrder = [];
   int? selectedTable;
   String customerGender = '';
 
+  // Aquí definimos el menú (simplificado para demostración)
   final Map<String, List<Map<String, dynamic>>> menuItems = {
-    'entrada': [
-      {'id': '1', 'name': 'Ensalada César', 'price': 12000},
-      {'id': '2', 'name': 'Sopa del día', 'price': 10000},
+    'Entradas': [
+      {'id': '1', 'name': 'Ensalada', 'price': 5000},
+      {'id': '2', 'name': 'Sopa', 'price': 3500},
     ],
-    'plato': [
-      {'id': '3', 'name': 'Pollo a la plancha', 'price': 25000},
-      {'id': '4', 'name': 'Pescado al horno', 'price': 30000},
+    'Platos': [
+      {'id': '3', 'name': 'Pasta', 'price': 7000},
+      {'id': '4', 'name': 'Pizza', 'price': 8500},
     ],
-    'bebida': [
-      {'id': '5', 'name': 'Jugo de naranja', 'price': 8000},
-      {'id': '6', 'name': 'Café', 'price': 4000},
-    ],
-    'postre': [
-      {'id': '7', 'name': 'Tiramisú', 'price': 15000},
-      {'id': '8', 'name': 'Helado', 'price': 10000},
+    'Postres': [
+      {'id': '5', 'name': 'Tarta', 'price': 4500},
+      {'id': '6', 'name': 'Helado', 'price': 3000},
     ],
   };
 
   @override
   void initState() {
     super.initState();
+    _cargarMesas();  // Cargar mesas desde la base de datos
     _cargarMisPedidos();
+  }
+
+  // Cargar mesas desde la base de datos
+  Future<void> _cargarMesas() async {
+    try {
+      final data = await _svc.fetchTables(waiterName);
+      setState(() {
+        tables = data;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error al cargar mesas: $e")),
+        );
+      }
+    }
   }
 
   Future<void> _cargarMisPedidos() async {
@@ -91,22 +109,35 @@ class _MeseroScreenState extends State<MeseroScreen> {
     }
   }
 
+  // Cambiar el estado de una mesa a "ocupada"
+  Future<void> _actualizarEstadoMesa(int tableId, String newStatus) async {
+    try {
+      await _svc.updateTableStatus(tableId, newStatus);
+      await _cargarMesas();  // recargar mesas después de la actualización
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Mesa actualizada")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error al actualizar mesa: $e")),
+      );
+    }
+  }
+
+  // Función para marcar un pedido como "Entregado"
   Future<void> _marcarComoEntregado(String orderId) async {
     try {
+      // Actualizamos el estado del pedido
       await _svc.updateOrderStatus(orderId, OrderStatus.entregado);
-      await _cargarMisPedidos(); // recarga la lista después de actualizar
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Pedido marcado como entregado")),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Pedido marcado como entregado")),
+      );
+      // Recargamos los pedidos
+      await _cargarMisPedidos();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error al actualizar: $e")),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error al marcar como entregado: $e")),
+      );
     }
   }
 
@@ -233,11 +264,11 @@ class _MeseroScreenState extends State<MeseroScreen> {
               final table = tables[index];
               return ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: table.occupied ? Colors.grey : Colors.white,
+                  backgroundColor: table.status == 'ocupada' ? Colors.grey : Colors.white,
                   foregroundColor: Colors.black,
-                  side: table.occupied ? null : const BorderSide(color: Colors.orange),
+                  side: table.status == 'ocupada' ? null : const BorderSide(color: Colors.orange),
                 ),
-                onPressed: table.occupied
+                onPressed: table.status == 'ocupada'
                     ? null
                     : () {
                         selectedTable = table.number;
@@ -249,101 +280,16 @@ class _MeseroScreenState extends State<MeseroScreen> {
                           builder: (_) => StatefulBuilder(
                             builder: (context, setDialogState) {
                               return AlertDialog(
-                                title: Text('Nuevo Pedido - Mesa $selectedTable'),
+                                title: Text('Nuevo Pedido - Mesa ${table.number}'),
                                 content: SizedBox(
                                   width: double.maxFinite,
                                   height: 400,
                                   child: Column(
                                     children: [
-                                      DropdownButton<String>(
-                                        value: customerGender.isEmpty ? null : customerGender,
-                                        hint: const Text('Selecciona género del cliente'),
-                                        items: const ['Hombre', 'Mujer']
-                                            .map((g) => DropdownMenuItem(value: g, child: Text(g)))
-                                            .toList(),
-                                        onChanged: (v) => setDialogState(() {
-                                          customerGender = v ?? '';
-                                        }),
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Expanded(
-                                        child: ListView(
-                                          children: menuItems.entries.map((entry) {
-                                            return ExpansionTile(
-                                              title: Text(entry.key.toUpperCase()),
-                                              children: entry.value.map((item) {
-                                                return ListTile(
-                                                  title: Text(item['name']),
-                                                  subtitle: Text('\$${item['price']}'),
-                                                  trailing: IconButton(
-                                                    icon: const Icon(Icons.add),
-                                                    onPressed: () {
-                                                      setDialogState(() {
-                                                        addItemToOrder(item, entry.key);
-                                                      });
-                                                    },
-                                                  ),
-                                                );
-                                              }).toList(),
-                                            );
-                                          }).toList(),
-                                        ),
-                                      ),
-                                      const Divider(),
-                                      if (currentOrder.isNotEmpty)
-                                        Expanded(
-                                          child: ListView(
-                                            children: currentOrder.map((item) {
-                                              return ListTile(
-                                                title: Text("${item.name} x${item.quantity}"),
-                                                trailing: Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    IconButton(
-                                                      icon: const Icon(Icons.remove),
-                                                      onPressed: () =>
-                                                          setDialogState(() => removeItemFromOrder(item)),
-                                                    ),
-                                                    IconButton(
-                                                      icon: const Icon(Icons.add),
-                                                      onPressed: () =>
-                                                          setDialogState(() => addItemToOrder({
-                                                                'id': item.id,
-                                                                'name': item.name,
-                                                                'price': item.price
-                                                              }, item.category)),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            }).toList(),
-                                          ),
-                                        ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        "Total: \$${currentOrder.fold<int>(0, (s, i) => s + i.price * i.quantity)}",
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold, fontSize: 18),
-                                      ),
+                                      DropdownButton<String>( ... )
                                     ],
                                   ),
                                 ),
-                                actions: [
-                                  TextButton(
-                                      onPressed: () {
-                                        Navigator.of(context).pop();
-                                      },
-                                      child: const Text('Cancelar')),
-                                  ElevatedButton(
-                                    onPressed: customerGender.isEmpty || currentOrder.isEmpty
-                                        ? null
-                                        : () async {
-                                            await submitOrder();
-                                            if (mounted) Navigator.of(context).pop();
-                                          },
-                                    child: const Text('Enviar'),
-                                  ),
-                                ],
                               );
                             },
                           ),
