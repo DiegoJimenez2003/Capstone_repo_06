@@ -7,7 +7,7 @@ class SupabaseService {
   SupabaseClient get _client => Supabase.instance.client;
 
   /// =====================
-  /// 🔹 OBTENER DATOS DE USUARIO DESDE LA TABLA 'usuario'
+  /// 🔹 OBTENER PERFIL DE MESERO (tabla usuario)
   ///    Usa el EMAIL de autenticación para obtener el ID de tu tabla (INTEGER).
   /// =====================
   Future<Map<String, dynamic>?> fetchMeseroProfile(String email) async {
@@ -25,28 +25,28 @@ class SupabaseService {
   }
   
   /// =====================
-  /// 🔹 CREAR PEDIDO
+  /// 🔹 CREAR PEDIDO (tabla pedidos)
   /// =====================
   Future<String> createOrder({
     required int tableNumber,
-    required String waiter,
+    required String waiterId, // id_usuario del mesero (INT convertido a String)
     required String customerGender,
     required int total,
-    required String status, // 'pendiente', 'listo', etc.
+    required String status,
   }) async {
     final id = DateTime.now().millisecondsSinceEpoch.toString();
     final insertPayload = {
-      'id': id,
-      'table_number': tableNumber,
-      'status': status,
+      'id': id, 
+      'numero_mesa': tableNumber, // COLUMNA EN ESPAÑOL
+      'estado': status, // COLUMNA EN ESPAÑOL
       'total': total,
-      'waiter': waiter,
-      'customer_gender': customerGender,
-      'timestamp': DateTime.now().toIso8601String(),
+      'mesero_id': waiterId, // COLUMNA EN ESPAÑOL (FK)
+      'genero_cliente': customerGender, // COLUMNA EN ESPAÑOL
+      'fecha_pedido': DateTime.now().toIso8601String(), // COLUMNA EN ESPAÑOL
     };
 
     final response = await _client
-        .from('orders')
+        .from('pedidos') // TABLA EN ESPAÑOL
         .insert(insertPayload)
         .select('id')
         .maybeSingle();
@@ -59,111 +59,107 @@ class SupabaseService {
   }
 
   /// =====================
-  /// 🔹 AGREGAR PRODUCTOS
+  /// 🔹 AGREGAR PRODUCTOS (tabla detalle_pedido)
+  ///    Las claves de entrada (name, price, etc.) se mapean a nombres en español.
   /// =====================
   Future<void> addOrderItems(
       String orderId, List<Map<String, dynamic>> itemsRows) async {
     final withOrderId = itemsRows.map((m) {
       final id = DateTime.now().microsecondsSinceEpoch.toString();
       return {
-        ...m,
         'id': id,
-        'order_id': orderId,
+        'id_pedido': orderId, // COLUMNA EN ESPAÑOL
+        'nombre_producto': m['name'], // Mapeado de 'name'
+        'categoria': m['category'], // Mapeado de 'category'
+        'precio': m['price'], // Mapeado de 'price'
+        'cantidad': m['quantity'], // Mapeado de 'quantity'
+        'estado_producto': m['product_status'] ?? 'pendiente', // Mapeado de 'product_status'
+        'hora_inicio_prep': DateTime.now().toIso8601String(),
       };
     }).toList();
-
-    await _client.from('order_items').insert(withOrderId);
+    
+    await _client.from('detalle_pedido').insert(withOrderId); // TABLA EN ESPAÑOL
   }
 
   /// =====================
-  /// 🔹 OBTENER PEDIDOS DEL MESERO (Filtrado por EMAIL/NOMBRE)
+  /// 🔹 OBTENER PEDIDOS DEL MESERO (pedidos)
   /// =====================
   Future<List<Map<String, dynamic>>> fetchMyOrdersWithItems(
-      String waiterEmail) async {
+      String waiterIdString) async {
+    // Consulta usando nombres de columnas en español
     final data = await _client
-        .from('orders')
+        .from('pedidos') // TABLA EN ESPAÑOL
         .select(''' 
-          id,
-          table_number,
-          waiter,
-          customer_gender,
-          status,
+          id, 
+          numero_mesa,
+          mesero_id,
+          estado,
           total,
-          timestamp,
-          order_items(
+          fecha_pedido,
+          detalle_pedido ( // Relación anidada a tabla en español
             id,
-            name,
-            category,
-            price,
-            quantity,
-            product_status
+            nombre_producto,
+            categoria,
+            precio,
+            cantidad,
+            estado_producto
           )
         ''')
-        .eq('waiter', waiterEmail) // Filtra por el email/nombre del mesero almacenado en 'waiter'
-        .order('timestamp', ascending: false);
+        .eq('mesero_id', waiterIdString) // Filtra por 'mesero_id'
+        .order('fecha_pedido', ascending: false);
 
     return List<Map<String, dynamic>>.from(data);
   }
 
   /// =====================
-  /// 🔹 ACTUALIZAR ESTADO DE PEDIDO
-  /// =====================
-  Future<void> updateOrderStatus(String orderId, OrderStatus status) async {
-    await _client
-        .from('orders')
-        .update({'status': status.toDb()})
-        .eq('id', orderId);
-  }
-
-  /// =====================
-  /// 🔹 OBTENER TODOS LOS PEDIDOS (COCINA)
+  /// 🔹 OBTENER TODOS LOS PEDIDOS (COCINA - pedidos)
   /// =====================
   Future<List<Map<String, dynamic>>> fetchAllOrdersWithItems() async {
     final data = await _client
-        .from('orders')
+        .from('pedidos') // TABLA EN ESPAÑOL
         .select(''' 
           id,
-          table_number,
-          waiter,
-          status,
+          numero_mesa,
+          mesero_id,
+          estado,
           total,
-          order_items (
+          detalle_pedido (
             id,
-            name,
-            category,
-            price,
-            quantity,
-            product_status
+            nombre_producto,
+            categoria,
+            precio,
+            cantidad,
+            estado_producto
           )
         ''')
-        .order('timestamp', ascending: false);
+        .order('fecha_pedido', ascending: false);
 
     return List<Map<String, dynamic>>.from(data);
   }
-
+  
   /// =====================
-  /// 🔹 ACTUALIZAR ESTADO DE UN PRODUCTO
+  /// 🔹 ACTUALIZAR ESTADO DE UN PRODUCTO (detalle_pedido)
   /// =====================
   Future<void> updateProductStatus(String itemId, String newStatus) async {
     final normalizedStatus = OrderStatusMapper.normalize(newStatus);
 
     final updatedRow = await _client
-        .from('order_items')
-        .update({'product_status': normalizedStatus})
+        .from('detalle_pedido') // TABLA EN ESPAÑOL
+        .update({'estado_producto': normalizedStatus}) // COLUMNA EN ESPAÑOL
         .eq('id', itemId)
-        .select('order_id')
+        .select('id_pedido') // COLUMNA EN ESPAÑOL (FK al pedido)
         .maybeSingle();
 
-    if (updatedRow == null || updatedRow['order_id'] == null) {
+    if (updatedRow == null || updatedRow['id_pedido'] == null) {
       return;
     }
 
-    final orderId = updatedRow['order_id'] as String;
+    final orderId = updatedRow['id_pedido'] as String;
 
     final items = await _client
-        .from('order_items')
-        .select('product_status')
-        .eq('order_id', orderId);
+        .from('detalle_pedido') // TABLA EN ESPAÑOL
+        .select('estado_producto')
+        .eq('id_pedido', orderId);
 
     final orderStatus = _determineOrderStatusFromItems(items);
 
@@ -175,7 +171,7 @@ class SupabaseService {
     if (items.isEmpty) {
       return OrderStatus.pendiente;
     }
-
+    
     const priorities = {
       OrderStatus.pendiente: 0,
       OrderStatus.preparacion: 1,
@@ -188,7 +184,7 @@ class SupabaseService {
     OrderStatus? resultingStatus;
 
     for (final item in items) {
-      final rawStatus = (item['product_status'] as String?) ?? 'pendiente';
+      final rawStatus = (item['estado_producto'] as String?) ?? 'pendiente'; // COLUMNA EN ESPAÑOL
       final normalized = OrderStatusMapper.fromDb(rawStatus);
 
       if (!priorities.containsKey(normalized)) {
@@ -207,28 +203,33 @@ class SupabaseService {
   }
 
   /// =====================
-  /// 🔹 OBTENER MESAS (Filtrado por ID_MESERO INTEGER)
+  /// 🔹 ACTUALIZAR ESTADO DE PEDIDO (pedidos)
+  /// =====================
+  Future<void> updateOrderStatus(String orderId, OrderStatus status) async {
+    await _client
+        .from('pedidos') // TABLA EN ESPAÑOL
+        .update({'estado': status.toDb()}) // COLUMNA EN ESPAÑOL
+        .eq('id', orderId);
+  }
+
+
+  /// =====================
+  /// 🔹 OBTENER MESAS (mesa)
   /// =====================
   Future<List<TableData>> fetchTables(int waiterId) async { 
   try {
     final data = await _client
-        .from('mesa')  // Nombre de la tabla
+        .from('mesa') // TABLA EN ESPAÑOL
         .select()
-        .eq('id_mesero', waiterId)  // Filtramos por el ID_MESERO INTEGER
-        .order('numero_mesa', ascending: true); // Asegúrate que es 'numero_mesa'
+        .eq('id_mesero', waiterId) // COLUMNA EN ESPAÑOL
+        .order('numero_mesa', ascending: true); // COLUMNA EN ESPAÑOL
 
-    // Agregar un print para inspeccionar los datos
-    print("Mesas obtenidas: $data");
-
-    // Mapeamos los datos a objetos TableData
     final List<TableData> tables = List<TableData>.from(
       data.map((mesa) => TableData(
-        id: mesa['id_mesa'] as int,  // Cambiar a 'id_mesa'
-        number: mesa['numero_mesa'] as int,  // Cambiar a 'numero_mesa'
-        status: mesa['estado'] as String,  // Mantiene 'estado'
-        capacity: mesa['capacidad'] as int,  // Mantiene 'capacidad'
-        // El campo 'waiter' en el modelo TableData espera un String, 
-        // pero aquí solo tenemos el ID. Por simplicidad, usamos el ID convertido a String.
+        id: mesa['id_mesa'] as int, // COLUMNA EN ESPAÑOL
+        number: mesa['numero_mesa'] as int, // COLUMNA EN ESPAÑOL
+        status: mesa['estado'] as String, // COLUMNA EN ESPAÑOL
+        capacity: mesa['capacidad'] as int, // COLUMNA EN ESPAÑOL
         waiter: mesa['id_mesero'] != null ? "Mesero ${mesa['id_mesero']}" : null,
         waiterId: mesa['id_mesero'] as int?,
       )),
@@ -236,32 +237,31 @@ class SupabaseService {
 
     return tables;
   } catch (e) {
-    rethrow;  // Propagar el error para que pueda ser manejado en la UI
+    rethrow;
   }
 }
 
-
   /// =====================
-  /// 🔹 ACTUALIZAR ESTADO DE LA MESA
+  /// 🔹 ACTUALIZAR ESTADO DE LA MESA (mesa)
   /// =====================
   Future<void> updateTableStatus(int tableId, TableStatus status) async {
     try {
       await _client
-          .from('mesa')
-          .update({'estado': status.toDb()})  // Convertir el enum a texto
-          .eq('id_mesa', tableId); // Usar 'id_mesa' para el filtro
+          .from('mesa') // TABLA EN ESPAÑOL
+          .update({'estado': status.toDb()}) // COLUMNA EN ESPAÑOL
+          .eq('id_mesa', tableId); // COLUMNA EN ESPAÑOL
     } catch (e) {
       rethrow;
     }
   }
 
   /// =====================
-  /// 🔹 ASIGNAR MESERO A UNA MESA
+  /// 🔹 ASIGNAR MESERO A UNA MESA (mesa)
   /// =====================
   Future<void> assignWaiterToTable(int tableId, int waiterId) async {
     await _client
-        .from('mesa')
-        .update({'id_mesero': waiterId})
-        .eq('id_mesa', tableId);
+        .from('mesa') // TABLA EN ESPAÑOL
+        .update({'id_mesero': waiterId}) // COLUMNA EN ESPAÑOL
+        .eq('id_mesa', tableId); // COLUMNA EN ESPAÑOL
   }
 }
