@@ -7,15 +7,13 @@ class SupabaseService {
   SupabaseClient get _client => Supabase.instance.client;
 
   /// =====================
-  /// 🔹 OBTENER DATOS DE USUARIO DESDE LA TABLA 'usuario'
-  ///    Usa el EMAIL de autenticación para obtener el ID de tu tabla (INTEGER).
+  /// 🔹 OBTENER PERFIL DE MESERO (tabla usuario)
   /// =====================
   Future<Map<String, dynamic>?> fetchMeseroProfile(String email) async {
-    // Buscamos en la tabla 'usuario' donde el 'correo' coincida con el email del usuario
     final data = await _client
         .from('usuario')
         .select('id_usuario, nombre, correo, id_rol') 
-        .eq('correo', email) // Filtramos por la columna 'correo' de tu tabla
+        .eq('correo', email)
         .maybeSingle();
 
     if (data == null) {
@@ -25,7 +23,7 @@ class SupabaseService {
   }
   
   /// =====================
-  /// 🔹 CREAR PEDIDO (Inserta en la tabla 'pedidos')
+  /// 🔹 CREAR PEDIDO (tabla pedidos)
   /// =====================
   Future<String> createOrder({
     required int tableNumber,
@@ -34,20 +32,19 @@ class SupabaseService {
     required int total,
     required String status,
   }) async {
-    // Usamos millisecondsSinceEpoch como ID temporal (TEXT)
     final id = DateTime.now().millisecondsSinceEpoch.toString();
     final insertPayload = {
-      'id': id,
-      'numero_mesa': tableNumber, // Columna: numero_mesa
-      'estado': status,           // Columna: estado
-      'total': total,             // Columna: total
-      'mesero_id': waiterId,      // Columna: mesero_id (ID del usuario)
-      'genero_cliente': customerGender, // Columna: genero_cliente
-      'fecha_pedido': DateTime.now().toIso8601String(), // Columna: fecha_pedido
+      'id': id, 
+      'numero_mesa': tableNumber,
+      'estado': status,
+      'total': total,
+      'mesero_id': waiterId,
+      'genero_cliente': customerGender,
+      'fecha_pedido': DateTime.now().toIso8601String(),
     };
 
     final response = await _client
-        .from('pedidos') // Tabla: pedidos
+        .from('pedidos')
         .insert(insertPayload)
         .select('id')
         .maybeSingle();
@@ -60,34 +57,62 @@ class SupabaseService {
   }
 
   /// =====================
-  /// 🔹 AGREGAR PRODUCTOS (Inserta en la tabla 'detalle_pedido')
+  /// 🔹 AGREGAR PRODUCTOS (tabla detalle_pedido)
   /// =====================
   Future<void> addOrderItems(
       String orderId, List<Map<String, dynamic>> itemsRows) async {
     final mappedItems = itemsRows.map((m) {
-      // Usamos microsecondsSinceEpoch para asegurar unicidad del id de detalle
-      final id = DateTime.now().microsecondsSinceEpoch.toString(); 
+      final id = DateTime.now().microsecondsSinceEpoch.toString();
       return {
         'id': id,
-        'id_pedido': orderId,             // FK a pedidos(id)
-        'nombre_producto': m['name'],     // Columna: nombre_producto
-        'categoria': m['category'],       // Columna: categoria
-        'precio': m['price'],             // Columna: precio
-        'cantidad': m['quantity'],        // Columna: cantidad
-        'estado_producto': m['product_status'], // Columna: estado_producto
+        'id_pedido': orderId,
+        'nombre_producto': m['name'],
+        'categoria': m['category'],
+        'precio': m['price'],
+        'cantidad': m['quantity'],
+        'estado_producto': m['product_status'] ?? 'pendiente',
+        'hora_inicio_prep': DateTime.now().toIso8601String(),
       };
     }).toList();
 
-    await _client.from('detalle_pedido').insert(mappedItems); // Tabla: detalle_pedido
+    await _client.from('detalle_pedido').insert(mappedItems);
   }
 
   /// =====================
-  /// 🔹 OBTENER PEDIDOS DEL MESERO
+  /// 🔹 OBTENER PEDIDOS DEL MESERO (pedidos)
   /// =====================
   Future<List<Map<String, dynamic>>> fetchMyOrdersWithItems(
-      String waiterId) async { // Recibe el ID del mesero como String
+      String waiterIdString) async {
     final data = await _client
-        .from('pedidos') // Tabla: pedidos
+        .from('pedidos')
+        .select(''' 
+          id, 
+          numero_mesa,
+          mesero_id,
+          estado,
+          total,
+          fecha_pedido,
+          detalle_pedido (
+            id,
+            nombre_producto,
+            categoria,
+            precio,
+            cantidad,
+            estado_producto
+          )
+        ''')
+        .eq('mesero_id', waiterIdString)
+        .order('fecha_pedido', ascending: false);
+
+    return List<Map<String, dynamic>>.from(data);
+  }
+
+  /// =====================
+  /// 🔹 OBTENER TODOS LOS PEDIDOS (COCINA/ADMIN)
+  /// =====================
+  Future<List<Map<String, dynamic>>> fetchAllOrdersWithItems() async {
+    final data = await _client
+        .from('pedidos')
         .select(''' 
           id,
           numero_mesa,
@@ -95,7 +120,7 @@ class SupabaseService {
           estado,
           total,
           fecha_pedido,
-          detalle_pedido(
+          detalle_pedido (
             id,
             nombre_producto,
             categoria,
@@ -104,34 +129,7 @@ class SupabaseService {
             estado_producto
           )
         ''')
-        .eq('mesero_id', waiterId) // Filtra por la columna mesero_id
-        .order('fecha_pedido', ascending: false); // Columna: fecha_pedido
-
-    return List<Map<String, dynamic>>.from(data);
-  }
-
-  /// =====================
-  /// 🔹 OBTENER TODOS LOS PEDIDOS (COCINA)
-  /// =====================
-  Future<List<Map<String, dynamic>>> fetchAllOrdersWithItems() async {
-    final data = await _client
-        .from('pedidos') // Tabla: pedidos
-        .select(''' 
-          id,
-          numero_mesa,
-          mesero_id,
-          estado,
-          total,
-          detalle_pedido(
-            id,
-            nombre_producto,
-            categoria,
-            precio,
-            cantidad,
-            estado_producto
-          )
-        ''')
-        .order('fecha_pedido', ascending: false); // Columna: fecha_pedido
+        .order('fecha_pedido', ascending: false);
 
     return List<Map<String, dynamic>>.from(data);
   }
@@ -143,22 +141,22 @@ class SupabaseService {
     final normalizedStatus = OrderStatusMapper.normalize(newStatus);
 
     final updatedRow = await _client
-        .from('detalle_pedido') // Tabla: detalle_pedido
-        .update({'estado_producto': normalizedStatus}) // Columna: estado_producto
-        .eq('id', itemId) // Columna: id (del detalle)
-        .select('id_pedido') // Columna: id_pedido
+        .from('detalle_pedido')
+        .update({'estado_producto': normalizedStatus})
+        .eq('id', itemId)
+        .select('id_pedido')
         .maybeSingle();
 
     if (updatedRow == null || updatedRow['id_pedido'] == null) {
       return;
     }
 
-    final orderId = updatedRow['id_pedido'] as String; // Columna: id_pedido
+    final orderId = updatedRow['id_pedido'] as String;
 
     final items = await _client
-        .from('detalle_pedido') // Tabla: detalle_pedido
-        .select('estado_producto') // Columna: estado_producto
-        .eq('id_pedido', orderId); // Columna: id_pedido
+        .from('detalle_pedido')
+        .select('estado_producto')
+        .eq('id_pedido', orderId);
 
     final orderStatus = _determineOrderStatusFromItems(items);
 
@@ -166,9 +164,6 @@ class SupabaseService {
   }
 
   OrderStatus _determineOrderStatusFromItems(dynamic itemsResponse) {
-    // La lógica de determinar el estado de la orden principal (pedidos.estado)
-    // a partir de los estados de los ítems (detalle_pedido.estado_producto)
-    // se mantiene igual.
     final items = List<Map<String, dynamic>>.from(itemsResponse ?? const []);
     if (items.isEmpty) {
       return OrderStatus.pendiente;
@@ -186,7 +181,7 @@ class SupabaseService {
     OrderStatus? resultingStatus;
 
     for (final item in items) {
-      final rawStatus = (item['estado_producto'] as String?) ?? 'pendiente'; // Columna: estado_producto
+      final rawStatus = (item['estado_producto'] as String?) ?? 'pendiente';
       final normalized = OrderStatusMapper.fromDb(rawStatus);
 
       if (!priorities.containsKey(normalized)) {
@@ -210,20 +205,19 @@ class SupabaseService {
   Future<List<TableData>> fetchTables(int waiterId) async { 
   try {
     final data = await _client
-        .from('mesa')  // Tabla: mesa
+        .from('mesa')
         .select()
-        .eq('id_mesero', waiterId)  // Columna: id_mesero
-        .order('numero_mesa', ascending: true); // Columna: numero_mesa
+        .eq('id_mesero', waiterId)
+        .order('numero_mesa', ascending: true);
 
-    // Mapeamos los datos a objetos TableData
     final List<TableData> tables = List<TableData>.from(
       data.map((mesa) => TableData(
-        id: mesa['id_mesa'] as int,           // Columna: id_mesa
-        number: mesa['numero_mesa'] as int,   // Columna: numero_mesa
-        status: mesa['estado'] as String,     // Columna: estado
-        capacity: mesa['capacidad'] as int,   // Columna: capacidad
+        id: mesa['id_mesa'] as int,
+        number: mesa['numero_mesa'] as int,
+        status: mesa['estado'] as String,
+        capacity: mesa['capacidad'] as int,
         waiter: mesa['id_mesero'] != null ? "Mesero ${mesa['id_mesero']}" : null,
-        waiterId: mesa['id_mesero'] as int?,  // Columna: id_mesero
+        waiterId: mesa['id_mesero'] as int?,
       )),
     );
 
@@ -240,9 +234,9 @@ class SupabaseService {
   Future<void> updateTableStatus(int tableId, TableStatus status) async {
     try {
       await _client
-          .from('mesa') // Tabla: mesa
-          .update({'estado': status.toDb()})  // Columna: estado
-          .eq('id_mesa', tableId); // Columna: id_mesa
+          .from('mesa')
+          .update({'estado': status.toDb()})
+          .eq('id_mesa', tableId);
     } catch (e) {
       rethrow;
     }
@@ -253,9 +247,9 @@ class SupabaseService {
   /// =====================
   Future<void> updateOrderStatus(String orderId, OrderStatus status) async {
     await _client
-        .from('pedidos') // Tabla: pedidos
-        .update({'estado': status.toDb()}) // Columna: estado
-        .eq('id', orderId); // Columna: id
+        .from('pedidos')
+        .update({'estado': status.toDb()})
+        .eq('id', orderId);
   }
   
   /// =====================

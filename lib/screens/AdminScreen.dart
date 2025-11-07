@@ -27,46 +27,58 @@ class _AdminScreenState extends State<AdminScreen> {
   @override
   void initState() {
     super.initState();
+    // Llama a la función de carga al iniciar
     _loadMetrics();
   }
 
   Future<void> _loadMetrics() async {
-    // Usaremos los filtros de fecha para simular "Pedidos Hoy".
+    // Resetear métricas antes de calcular
+    _todayOrders = 0;
+    _todayRevenue = 0.0;
+
     final today = DateTime.now();
+    // Definimos el inicio del día para filtrar pedidos de hoy
     final todayStart = DateTime(today.year, today.month, today.day);
     
-    // Obtenemos todos los pedidos para el dashboard
     try {
+      // Usamos la función del servicio que trae todos los pedidos
       final allOrders = await _svc.fetchAllOrdersWithItems();
 
-      int completedOrders = 0;
+      int ordersCount = 0;
       double revenue = 0.0;
       int active = 0;
       List<Map<String, dynamic>> tempActiveList = [];
 
       for (var order in allOrders) {
-        final orderDate = DateTime.parse(order['fecha_pedido'] as String);
-        final status = order['estado'] as String;
-        final total = (order['total'] as num).toDouble();
+        // Hacemos el parsing robusto de las columnas en español
+        final rawDate = order['fecha_pedido'] as String?;
+        final status = order['estado'] as String?;
+        final total = (order['total'] as num?)?.toDouble() ?? 0.0; // Usamos double
 
-        // 1. Calcular pedidos e ingresos de hoy (simulado)
+        if (rawDate == null || status == null) continue;
+
+        final orderDate = DateTime.tryParse(rawDate);
+        if (orderDate == null) continue;
+
+        // 1. Calcular pedidos e ingresos de hoy
+        // La comparación debe ser estricta con UTC o con Huso Horario si es posible.
         if (orderDate.isAfter(todayStart)) {
-          _todayOrders++;
+          ordersCount++;
           revenue += total;
         }
 
         // 2. Determinar pedidos activos (Pendiente, Preparación, Horno, Listo)
-        final isCompleted = status == 'entregado' || status == 'cancelado';
-        if (!isCompleted) {
+        final isCompletedOrCanceled = status == 'entregado' || status == 'cancelado';
+        if (!isCompletedOrCanceled) {
           active++;
           tempActiveList.add(order);
         }
       }
 
-      // Actualizamos el estado de las métricas
+      // Actualizamos el estado de las métricas en la UI
       if (mounted) {
         setState(() {
-          _todayOrders = completedOrders; // Necesitas otra consulta para "Hoy", esto solo cuenta todos.
+          _todayOrders = ordersCount;
           _todayRevenue = revenue;
           _activeOrders = active;
           _activeOrdersList = tempActiveList;
@@ -74,11 +86,13 @@ class _AdminScreenState extends State<AdminScreen> {
       }
     } catch (e) {
       if (mounted) {
+        // Muestra el error exacto en la snackbar
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("❌ Error al cargar métricas del Admin: $e")),
         );
         setState(() {
-          _activeOrdersList = []; // Limpiar lista en caso de error
+          _activeOrders = 0;
+          _activeOrdersList = [];
         });
       }
     }
@@ -145,26 +159,26 @@ class _AdminScreenState extends State<AdminScreen> {
                   _buildMetricCard(
                     icon: FontAwesomeIcons.receipt,
                     color: Colors.blueAccent,
-                    title: "Pedidos Activos",
-                    value: "${_activeOrders}",
+                    title: "Pedidos de Hoy",
+                    value: "${_todayOrders}", // Métrica real
                   ),
                   _buildMetricCard(
                     icon: FontAwesomeIcons.dollarSign,
                     color: Colors.green,
                     title: "Ingresos (Total)",
-                    value: "\$${_todayRevenue.toStringAsFixed(0)}",
+                    value: "\$${_todayRevenue.toStringAsFixed(0)}", // Métrica real
                   ),
                   _buildMetricCard(
                     icon: FontAwesomeIcons.clock,
                     color: Colors.orange,
                     title: "Tiempo Promedio",
-                    value: "N/A min", // Requiere lógica compleja de cálculo
+                    value: "N/A min", // Dejado como N/A
                   ),
                   _buildMetricCard(
                     icon: FontAwesomeIcons.users,
                     color: Colors.purple,
-                    title: "Meseros Activos",
-                    value: "N/A", // Requeriría un campo de "última actividad"
+                    title: "Pedidos Activos",
+                    value: "${_activeOrders}", // Métrica real
                   ),
                 ],
               ),
@@ -190,13 +204,15 @@ class _AdminScreenState extends State<AdminScreen> {
                     final mesa = "Mesa ${order['numero_mesa']}"; 
                     final meseroId = order['mesero_id']?.toString() ?? 'N/A';
                     
+                    // Contar los ítems anidados en la lista 'detalle_pedido'
+                    final itemsCount = order['detalle_pedido'] is List 
+                        ? (order['detalle_pedido'] as List).length 
+                        : 0;
+                    
                     return _buildOrderCard(
                       mesa,
                       "Mesero ID: ${meseroId}",
-                      // Contar los productos anidados. Usamos detalle_pedido.
-                      order['detalle_pedido'] is List 
-                          ? (order['detalle_pedido'] as List).length 
-                          : 0,
+                      itemsCount, // Cantidad de ítems
                       total, 
                       order['estado']?.toString() ?? 'pendiente',
                     );
@@ -236,7 +252,6 @@ class _AdminScreenState extends State<AdminScreen> {
     required String title,
     required String value,
   }) {
-    // ... (Se mantiene el código del widget _buildMetricCard)
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -278,7 +293,6 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildOrderCard(String mesa, String mesero, int items, int total, String estado) {
-    // ... (Se mantiene el código del widget _buildOrderCard)
     final normalized = OrderStatusMapper.normalize(estado);
     final status = OrderStatusMapper.fromDb(normalized);
     final color = _statusColor(status);
@@ -311,7 +325,6 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Color _statusColor(OrderStatus status) {
-    // ... (Se mantiene el código de _statusColor)
     switch (status) {
       case OrderStatus.pendiente:
         return Colors.amber;
