@@ -6,6 +6,7 @@ import '../servicios/supabase_service.dart';
 import '../models/order_status.dart';
 import '../models/mesa_status.dart';
 import '../models/mesa_data.dart'; 
+import 'LoginScreen.dart'; 
 
 class OrderItem {
   final String id;
@@ -148,6 +149,19 @@ class _MeseroScreenState extends State<MeseroScreen> {
       }
     }
   }
+  // Cierra la sesión y navega a la pantalla de Login
+Future<void> _logOut() async {
+  await _svc.logOut();
+  if (mounted) {
+    // Usamos Navigator.pushAndRemoveUntil para limpiar la pila de navegación
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const Loginscreen()),
+      (Route<dynamic> route) => false,
+    );
+  }
+}
+
 
   Future<void> _actualizarEstadoMesa(int tableId, String newStatus) async {
     try {
@@ -460,33 +474,28 @@ class _MeseroScreenState extends State<MeseroScreen> {
           const Text("Mis Pedidos:",
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
-          myOrders.isEmpty
+                    myOrders.isEmpty
               ? const Center(child: Text("No tienes pedidos activos"))
               : Column(
                   children: myOrders.map((orderRow) {
-                    // Usamos la relación anidada a 'detalle_pedido'
                     final itemsData = List<Map<String, dynamic>>.from(orderRow['detalle_pedido'] ?? const []); 
                     
                     int totalItems = 0;
                     final total = (orderRow['total'] as num?)?.toInt() ?? 0;
                     
                     final List<Map<String, dynamic>> processedItems = itemsData.map((itemDetail) {
-                        // Accedemos a las columnas renombradas en español
-                        final name = itemDetail['nombre_producto'] ?? 'Producto Desconocido';
-                        final quantity = (itemDetail['cantidad'] as num?)?.toInt() ?? 0; 
-                        
-                        totalItems += quantity;
-                        
-                        return {
-                            'name': name,
-                            'quantity': quantity,
-                            'status': itemDetail['estado_producto']?.toString() ?? 'pendiente',
-                        };
+                      final name = itemDetail['nombre_producto'] ?? 'Producto Desconocido';
+                      final quantity = (itemDetail['cantidad'] as num?)?.toInt() ?? 0; 
+                      totalItems += quantity;
+                      return {
+                        'name': name,
+                        'quantity': quantity,
+                        'status': itemDetail['estado_producto']?.toString() ?? 'pendiente',
+                      };
                     }).toList();
 
-
                     final status = OrderStatusMapper.fromDb(orderRow['estado']?.toString() ?? 'pendiente');
-                    final mesa = "Mesa ${orderRow['numero_mesa']}"; // Usamos 'numero_mesa'
+                    final mesa = "Mesa ${orderRow['numero_mesa']}";
 
                     return Card(
                       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -558,8 +567,31 @@ class _MeseroScreenState extends State<MeseroScreen> {
                     );
                   }).toList(),
                 ),
+
+          const SizedBox(height: 30),
+
+          // 🔹 Botón de Cerrar Sesión (fuera del map)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton.icon(
+                onPressed: _logOut,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.grey[300],
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.logout, color: Colors.black87),
+                label: const Text("Cerrar Sesión", style: TextStyle(color: Colors.black87)),
+              ),
+            ],
+          ),
+
         ],
+        
       ),
+      
     );
+
   }
 }

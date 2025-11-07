@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/order_status.dart';
 import '../servicios/supabase_service.dart';
-import 'LoginScreen.dart'; // Para navegar de vuelta
+import 'LoginScreen.dart'; 
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../servicios/supabase_service.dart';
 import '../models/order_status.dart';
+import '../screens/Loginscreen.dart'; 
 
 class CocinaScreen extends StatefulWidget {
   const CocinaScreen({super.key});
@@ -51,6 +52,18 @@ class _CocinaScreenState extends State<CocinaScreen> {
     }
   }
 
+  // 🔹 FUNCIÓN PARA CERRAR SESIÓN
+  Future<void> _logOut() async {
+    await _svc.logOut();
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const Loginscreen()),
+        (Route<dynamic> route) => false,
+      );
+    }
+  }
+
   Color getColor(String status) {
     final normalized = OrderStatusMapper.normalize(status);
     switch (normalized) {
@@ -88,111 +101,121 @@ class _CocinaScreenState extends State<CocinaScreen> {
             )
           : ListView(
               padding: const EdgeInsets.all(12),
-              children: pedidos.map((pedido) {
-                // Usamos 'detalle_pedido' para la relación
-                final items = List<Map<String, dynamic>>.from(pedido['detalle_pedido'] ?? const []); 
-                // Usamos 'estado'
-                final orderStatusValue =
-                    OrderStatusMapper.normalize(pedido['estado'] ?? 'pendiente');
-                final orderStatus = OrderStatusMapper.fromDb(orderStatusValue);
-                
-                // Usamos 'mesero_id' y 'numero_mesa'
-                final waiterDisplay = pedido['mesero_id']?.toString() ?? 'N/A';
-                final mesaNumber = pedido['numero_mesa']?.toString() ?? 'N/A';
-                
-                final total = (pedido['total'] as num?)?.toStringAsFixed(0) ?? '0';
+              children: [
+                ...pedidos.map((pedido) {
+                  final items = List<Map<String, dynamic>>.from(pedido['detalle_pedido'] ?? const []); 
+                  final orderStatusValue =
+                      OrderStatusMapper.normalize(pedido['estado'] ?? 'pendiente');
+                  final orderStatus = OrderStatusMapper.fromDb(orderStatusValue);
+                  
+                  final waiterDisplay = pedido['mesero_id']?.toString() ?? 'N/A';
+                  final mesaNumber = pedido['numero_mesa']?.toString() ?? 'N/A';
+                  
+                  final total = (pedido['total'] as num?)?.toStringAsFixed(0) ?? '0';
 
-                return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  elevation: 2,
-                  child: ExpansionTile(
-                    // Usamos 'numero_mesa' y 'mesero_id'
-                    title: Text(
-                      "Mesa ${mesaNumber} - Mesero ID: ${waiterDisplay}",
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                      "Total: \$${total} • Estado: ${orderStatus.label}",
-                      style: const TextStyle(color: Colors.black54),
-                    ),
-                    children: items.map((item) {
-                      // Usamos 'estado_producto'
-                      final estado = OrderStatusMapper.normalize(
-                          item['estado_producto'] ?? 'pendiente');
-                      final statusEnum = OrderStatusMapper.fromDb(estado);
-                      // Usamos 'nombre_producto' y 'cantidad'
-                      final itemName = item['nombre_producto'] ?? 'Producto Desconocido'; 
-                      final itemQuantity = (item['cantidad'] as num?)?.toInt() ?? 1; 
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    elevation: 2,
+                    child: ExpansionTile(
+                      title: Text(
+                        "Mesa $mesaNumber - Mesero ID: $waiterDisplay",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(
+                        "Total: \$$total • Estado: ${orderStatus.label}",
+                        style: const TextStyle(color: Colors.black54),
+                      ),
+                      children: items.map((item) {
+                        final estado = OrderStatusMapper.normalize(
+                            item['estado_producto'] ?? 'pendiente');
+                        final statusEnum = OrderStatusMapper.fromDb(estado);
+                        final itemName = item['nombre_producto'] ?? 'Producto Desconocido'; 
+                        final itemQuantity = (item['cantidad'] as num?)?.toInt() ?? 1; 
 
-                      // Filtramos los estados permitidos para el dropdown
-                      final allowedStatuses = _statusOptions;
+                        final allowedStatuses = _statusOptions;
 
-                      // Evita el error si el valor actual no está en allowedStatuses
-                      final safeValue = allowedStatuses
-                              .any((s) => s.toDb() == estado)
-                          ? estado
-                          : null;
+                        final safeValue = allowedStatuses.any((s) => s.toDb() == estado)
+                            ? estado
+                            : null;
 
-                      return ListTile(
-                        title: Text("${itemName} (${itemQuantity}x)"),
-                        subtitle: Row(
-                          children: [
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                color: getColor(estado),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text('Estado: ${statusEnum.label}'),
-                          ],
-                        ),
-                        trailing: statusEnum == OrderStatus.entregado
-                            ? const Text(
-                                "Entregado",
-                                style: TextStyle(
-                                    color: Colors.purple,
-                                    fontWeight: FontWeight.bold),
-                              )
-                            : DropdownButtonHideUnderline(
-                                child: Container(
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 8),
-                                  decoration: BoxDecoration(
-                                    color: getColor(estado).withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: getColor(estado)),
-                                  ),
-                                  child: DropdownButton<String>(
-                                    value: safeValue,
-                                    dropdownColor: Colors.white,
-                                    icon:
-                                        const Icon(Icons.keyboard_arrow_down),
-                                    items: allowedStatuses
-                                        .map(
-                                          (status) => DropdownMenuItem<String>(
-                                            value: status.toDb(),
-                                            child: Text(status.label),
-                                          ),
-                                        )
-                                        .toList(),
-                                    onChanged: (value) {
-                                      if (value != null && value != estado) {
-                                        // Usamos 'id' de detalle_pedido para actualizar
-                                        _actualizarEstadoProducto(
-                                            item['id']?.toString() ?? '', value);
-                                      }
-                                    },
-                                  ),
+                        return ListTile(
+                          title: Text("$itemName (${itemQuantity}x)"),
+                          subtitle: Row(
+                            children: [
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: getColor(estado),
+                                  shape: BoxShape.circle,
                                 ),
                               ),
-                      );
-                    }).toList(),
-                  ),
-                );
-              }).toList(),
+                              const SizedBox(width: 8),
+                              Text('Estado: ${statusEnum.label}'),
+                            ],
+                          ),
+                          trailing: statusEnum == OrderStatus.entregado
+                              ? const Text(
+                                  "Entregado",
+                                  style: TextStyle(
+                                      color: Colors.purple,
+                                      fontWeight: FontWeight.bold),
+                                )
+                              : DropdownButtonHideUnderline(
+                                  child: Container(
+                                    padding:
+                                        const EdgeInsets.symmetric(horizontal: 8),
+                                    decoration: BoxDecoration(
+                                      color: getColor(estado).withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: getColor(estado)),
+                                    ),
+                                    child: DropdownButton<String>(
+                                      value: safeValue,
+                                      dropdownColor: Colors.white,
+                                      icon: const Icon(Icons.keyboard_arrow_down),
+                                      items: allowedStatuses
+                                          .map(
+                                            (status) => DropdownMenuItem<String>(
+                                              value: status.toDb(),
+                                              child: Text(status.label),
+                                            ),
+                                          )
+                                          .toList(),
+                                      onChanged: (value) {
+                                        if (value != null && value != estado) {
+                                          _actualizarEstadoProducto(
+                                              item['id']?.toString() ?? '', value);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ),
+                        );
+                      }).toList(),
+                    ),
+                  );
+                }),
+
+                const SizedBox(height: 30),
+
+                // 🔹 BOTÓN DE CERRAR SESIÓN
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _logOut,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey[300],
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: const Icon(Icons.logout, color: Colors.black87),
+                      label: const Text("Cerrar Sesión", style: TextStyle(color: Colors.black87)),
+                    ),
+                  ],
+                ),
+              ],
             ),
     );
   }
