@@ -61,9 +61,11 @@ class _LoginscreenState extends State<Loginscreen> {
       // 4. Compara el rol de la DB con el rol seleccionado
       if (dbRoleId != selectedRoleId) {
         await client.auth.signOut(); // Cierra la sesión si el rol es incorrecto
-        _estado = "Acceso denegado. El rol real de ${dbRoleName} es ${_selectedRole == 'Mesero' ? 'Cocinero/Admin' : 'Mesero/Admin'}."; // Ajusta el mensaje
+        
+        // Corregimos el mensaje para que sea conciso y no dependa del nombre
+        _estado = "Acceso denegado. El rol seleccionado no coincide con el rol asignado en la base de datos.";
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("❌ ERROR: Acceso denegado. Rol incorrecto. Rol de la base de datos: ${dbRoleId}"))
+            SnackBar(content: Text("❌ ERROR: Acceso denegado. Rol incorrecto (DB ID: ${dbRoleId})."))
         );
         setState(() {});
         return;

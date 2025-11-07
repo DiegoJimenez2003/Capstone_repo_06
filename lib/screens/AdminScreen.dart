@@ -1,19 +1,104 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/order_status.dart';
+import '../servicios/supabase_service.dart';
+import 'LoginScreen.dart'; // Para navegar de vuelta
 
-class AdminScreen extends StatelessWidget {
+class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // Datos simulados
-    final int todayOrders = 47;
-    final int todayRevenue = 1250000;
-    final int avgOrderTime = 28;
-    final int activeOrders = 12;
+  State<AdminScreen> createState() => _AdminScreenState();
+}
 
+class _AdminScreenState extends State<AdminScreen> {
+  final _svc = SupabaseService();
+  
+  // Métricas del Dashboard
+  int _todayOrders = 0;
+  double _todayRevenue = 0.0;
+  int _activeOrders = 0;
+  
+  // Lista de pedidos activos para mostrar
+  List<Map<String, dynamic>> _activeOrdersList = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMetrics();
+  }
+
+  Future<void> _loadMetrics() async {
+    // Usaremos los filtros de fecha para simular "Pedidos Hoy".
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    
+    // Obtenemos todos los pedidos para el dashboard
+    try {
+      final allOrders = await _svc.fetchAllOrdersWithItems();
+
+      int completedOrders = 0;
+      double revenue = 0.0;
+      int active = 0;
+      List<Map<String, dynamic>> tempActiveList = [];
+
+      for (var order in allOrders) {
+        final orderDate = DateTime.parse(order['fecha_pedido'] as String);
+        final status = order['estado'] as String;
+        final total = (order['total'] as num).toDouble();
+
+        // 1. Calcular pedidos e ingresos de hoy (simulado)
+        if (orderDate.isAfter(todayStart)) {
+          _todayOrders++;
+          revenue += total;
+        }
+
+        // 2. Determinar pedidos activos (Pendiente, Preparación, Horno, Listo)
+        final isCompleted = status == 'entregado' || status == 'cancelado';
+        if (!isCompleted) {
+          active++;
+          tempActiveList.add(order);
+        }
+      }
+
+      // Actualizamos el estado de las métricas
+      if (mounted) {
+        setState(() {
+          _todayOrders = completedOrders; // Necesitas otra consulta para "Hoy", esto solo cuenta todos.
+          _todayRevenue = revenue;
+          _activeOrders = active;
+          _activeOrdersList = tempActiveList;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("❌ Error al cargar métricas del Admin: $e")),
+        );
+        setState(() {
+          _activeOrdersList = []; // Limpiar lista en caso de error
+        });
+      }
+    }
+  }
+
+  // Cierra la sesión y navega a la pantalla de Login
+  Future<void> _logOut() async {
+    await _svc.logOut();
+    if (mounted) {
+      // Usamos Navigator.pushAndRemoveUntil para limpiar la pila de navegación
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const Loginscreen()),
+        (Route<dynamic> route) => false,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
@@ -35,97 +120,109 @@ class AdminScreen extends StatelessWidget {
           ],
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Encabezado
-            const Text(
-              "Resumen del Día",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
+      body: RefreshIndicator(
+        onRefresh: _loadMetrics,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Encabezado
+              const Text(
+                "Resumen del Sistema",
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
 
-            // Tarjetas de métricas principales
-            GridView.count(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                _buildMetricCard(
-                  icon: FontAwesomeIcons.receipt,
-                  color: Colors.blueAccent,
-                  title: "Pedidos Hoy",
-                  value: "$todayOrders",
-                ),
-                _buildMetricCard(
-                  icon: FontAwesomeIcons.dollarSign,
-                  color: Colors.green,
-                  title: "Ingresos del Día",
-                  value: "\$${(todayRevenue / 1000).toStringAsFixed(0)}K",
-                ),
-                _buildMetricCard(
-                  icon: FontAwesomeIcons.clock,
-                  color: Colors.orange,
-                  title: "Tiempo Promedio",
-                  value: "$avgOrderTime min",
-                ),
-                _buildMetricCard(
-                  icon: FontAwesomeIcons.utensils,
-                  color: Colors.purple,
-                  title: "Pedidos Activos",
-                  value: "$activeOrders",
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 30),
-            const Divider(),
-
-            // Tabla o lista de estado de pedidos
-            const SizedBox(height: 20),
-            const Text(
-              "Pedidos Activos",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-
-            _buildOrderCard("Mesa 3", "Mesero: Ana", 3, 25000, "pendiente"),
-            _buildOrderCard("Mesa 5", "Mesero: Carlos", 2, 18000, "preparacion"),
-            _buildOrderCard("Mesa 8", "Mesero: José", 4, 42000, "entregado"),
-
-            const SizedBox(height: 40),
-
-            // Botones de acciones
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepOrangeAccent,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              // Tarjetas de métricas principales
+              GridView.count(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _buildMetricCard(
+                    icon: FontAwesomeIcons.receipt,
+                    color: Colors.blueAccent,
+                    title: "Pedidos Activos",
+                    value: "${_activeOrders}",
                   ),
-                  icon: const Icon(Icons.history, color: Colors.white),
-                  label: const Text("Ver Historial", style: TextStyle(color: Colors.white)),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey[300],
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  _buildMetricCard(
+                    icon: FontAwesomeIcons.dollarSign,
+                    color: Colors.green,
+                    title: "Ingresos (Total)",
+                    value: "\$${_todayRevenue.toStringAsFixed(0)}",
                   ),
-                  icon: const Icon(Icons.logout, color: Colors.black87),
-                  label: const Text("Cerrar Sesión", style: TextStyle(color: Colors.black87)),
+                  _buildMetricCard(
+                    icon: FontAwesomeIcons.clock,
+                    color: Colors.orange,
+                    title: "Tiempo Promedio",
+                    value: "N/A min", // Requiere lógica compleja de cálculo
+                  ),
+                  _buildMetricCard(
+                    icon: FontAwesomeIcons.users,
+                    color: Colors.purple,
+                    title: "Meseros Activos",
+                    value: "N/A", // Requeriría un campo de "última actividad"
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 30),
+              const Divider(),
+
+              // Lista de pedidos activos
+              const SizedBox(height: 20),
+              Text(
+                "Pedidos Activos (${_activeOrders})",
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+
+              if (_activeOrdersList.isEmpty)
+                const Center(child: Text("No hay pedidos pendientes o en preparación."))
+              else
+                Column(
+                  children: _activeOrdersList.map((order) {
+                    final status = OrderStatusMapper.fromDb(order['estado']?.toString() ?? 'pendiente');
+                    final total = (order['total'] as num?)?.toInt() ?? 0;
+                    final mesa = "Mesa ${order['numero_mesa']}"; 
+                    final meseroId = order['mesero_id']?.toString() ?? 'N/A';
+                    
+                    return _buildOrderCard(
+                      mesa,
+                      "Mesero ID: ${meseroId}",
+                      // Contar los productos anidados. Usamos detalle_pedido.
+                      order['detalle_pedido'] is List 
+                          ? (order['detalle_pedido'] as List).length 
+                          : 0,
+                      total, 
+                      order['estado']?.toString() ?? 'pendiente',
+                    );
+                  }).toList(),
                 ),
-              ],
-            ),
-          ],
+
+              const SizedBox(height: 40),
+
+              // Botón de Cerrar Sesión
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _logOut,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey[300],
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.logout, color: Colors.black87),
+                    label: const Text("Cerrar Sesión", style: TextStyle(color: Colors.black87)),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -139,6 +236,7 @@ class AdminScreen extends StatelessWidget {
     required String title,
     required String value,
   }) {
+    // ... (Se mantiene el código del widget _buildMetricCard)
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -180,6 +278,7 @@ class AdminScreen extends StatelessWidget {
   }
 
   Widget _buildOrderCard(String mesa, String mesero, int items, int total, String estado) {
+    // ... (Se mantiene el código del widget _buildOrderCard)
     final normalized = OrderStatusMapper.normalize(estado);
     final status = OrderStatusMapper.fromDb(normalized);
     final color = _statusColor(status);
@@ -212,6 +311,7 @@ class AdminScreen extends StatelessWidget {
   }
 
   Color _statusColor(OrderStatus status) {
+    // ... (Se mantiene el código de _statusColor)
     switch (status) {
       case OrderStatus.pendiente:
         return Colors.amber;
