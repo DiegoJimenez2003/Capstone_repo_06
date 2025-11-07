@@ -35,7 +35,7 @@ class MeseroScreen extends StatefulWidget {
 class _MeseroScreenState extends State<MeseroScreen> {
   final _svc = SupabaseService();
   
-  // Guardaremos el ID del mesero (INTEGER de la tabla 'usuario') y su nombre de sesión (email)
+  // Guardaremos el ID del mesero (INTEGER de la tabla 'usuario') y su email
   int? _currentWaiterId; 
   String _currentWaiterEmail = '';
 
@@ -48,12 +48,12 @@ class _MeseroScreenState extends State<MeseroScreen> {
   @override
   void initState() {
     super.initState();
+    // Iniciamos el proceso de obtener el ID de perfil y cargar datos
     _initializeMeseroData(); 
   }
 
-  // Nueva función para obtener el ID real del mesero y cargar los datos
+  /// Inicializa los datos, obteniendo el ID del mesero de la tabla 'usuario'.
   Future<void> _initializeMeseroData() async {
-    // 1. Obtener el usuario autenticado
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null || user.email == null) {
       if (mounted) {
@@ -67,7 +67,7 @@ class _MeseroScreenState extends State<MeseroScreen> {
     _currentWaiterEmail = user.email!;
 
     try {
-      // 2. Buscar en la tabla 'usuario' usando el email para obtener el id_usuario (INT)
+      // 1. Obtener el id_usuario (INTEGER) usando el email
       final profileData = await _svc.fetchMeseroProfile(_currentWaiterEmail);
 
       if (profileData == null || profileData['id_usuario'] == null) {
@@ -79,12 +79,11 @@ class _MeseroScreenState extends State<MeseroScreen> {
         return;
       }
 
-      // 3. Almacenar el ID INTEGER de la tabla 'usuario'
       setState(() {
         _currentWaiterId = profileData['id_usuario'] as int;
       });
 
-      // 4. Cargar las mesas y pedidos usando el ID REAL
+      // 2. Cargar datos usando el ID INTEGER
       await _cargarMesas(); 
       await _cargarMisPedidos();
       
@@ -116,16 +115,11 @@ class _MeseroScreenState extends State<MeseroScreen> {
   Future<void> _cargarMesas() async {
     if (_currentWaiterId == null) return; 
     try {
-      // Usamos el ID INTEGER (_currentWaiterId) para filtrar las mesas.
+      // Usa el ID INTEGER para filtrar por 'id_mesero' en la tabla 'mesa'
       final List<TableData> data = await _svc.fetchTables(_currentWaiterId!); 
       setState(() {
         tables = data;
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Mesas cargadas: ${data.length} para ID ${_currentWaiterId}")),
-        );
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -135,17 +129,18 @@ class _MeseroScreenState extends State<MeseroScreen> {
     }
   }
 
+  /// Carga los pedidos activos del mesero, filtrando por su ID (como String).
   Future<void> _cargarMisPedidos() async {
-    if (_currentWaiterEmail.isEmpty) return;
+    if (_currentWaiterId == null) return; 
 
     try {
-      final data = await _svc.fetchMyOrdersWithItems(_currentWaiterEmail); 
+      // Enviamos el ID del mesero (INT) como String al campo 'mesero_id' en pedidos.
+      final data = await _svc.fetchMyOrdersWithItems(_currentWaiterId!.toString()); 
       setState(() {
         myOrders = data;
       });
     } catch (e) {
       if (mounted) {
-        // CORRECCIÓN: Si falla la carga de pedidos, limpiamos la lista
         myOrders = [];
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error al cargar pedidos: $e")),
@@ -191,34 +186,48 @@ class _MeseroScreenState extends State<MeseroScreen> {
     }
   }
 
-  // Corregimos la función submitOrder para usar el email del mesero
+  /// Prepara y envía la nueva orden a Supabase.
   Future<void> submitOrder() async {
-    if (selectedTable == null || currentOrder.isEmpty || customerGender.isEmpty || _currentWaiterEmail.isEmpty) {
+    if (selectedTable == null || currentOrder.isEmpty || customerGender.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("⚠️ Completa todos los datos y asegúrate de que el mesero esté cargado.")),
+          const SnackBar(content: Text("⚠️ Completa todos los datos.")),
         );
       }
       return;
     }
+    
+    final currentWaiterId = _currentWaiterId;
+
+    if (currentWaiterId == null) {
+        if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Error: ID del mesero no disponible para enviar pedido.")),
+            );
+        }
+        return;
+    }
 
     try {
       final total = currentOrder.fold<int>(0, (sum, i) => sum + i.price * i.quantity);
+      
+      // 1. Crear pedido usando los nombres de columnas del servicio (en español)
       final orderId = await _svc.createOrder(
         tableNumber: selectedTable!,
-        waiter: _currentWaiterEmail, // Usar el email del mesero autenticado
+        waiterId: currentWaiterId.toString(), // mesero_id (INT como String)
         customerGender: customerGender.toLowerCase(),
         total: total,
         status: OrderStatus.pendiente.toDb(),
       );
 
+      // 2. Mapeo para la tabla `detalle_pedido` (usando claves en inglés para el mapeo del servicio)
       final itemsRows = currentOrder.map((i) {
         return {
-          'name': i.name,
-          'category': i.category,
-          'price': i.price,
-          'quantity': i.quantity,
-          'product_status': 'pendiente',
+          'name': i.name, // Se mapea a 'nombre_producto'
+          'price': i.price, // Se mapea a 'precio'
+          'quantity': i.quantity, // Se mapea a 'cantidad'
+          'category': i.category, // Se mapea a 'categoria'
+          'product_status': 'pendiente', // Se mapea a 'estado_producto'
         };
       }).toList();
 
@@ -236,6 +245,7 @@ class _MeseroScreenState extends State<MeseroScreen> {
         customerGender = '';
       });
 
+      // Recargar pedidos para ver la nueva orden
       await _cargarMisPedidos();
     } catch (e) {
       if (mounted) {
@@ -274,7 +284,7 @@ class _MeseroScreenState extends State<MeseroScreen> {
         currentOrder.add(OrderItem(
           id: item['id'],
           name: item['name'],
-          price: item['price'],
+          price: item['price'] is int ? item['price'] : (item['price'] as num).toInt(),
           category: category,
         ));
       }
@@ -309,7 +319,6 @@ class _MeseroScreenState extends State<MeseroScreen> {
           const Text("Mesas Disponibles:",
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
-          // Si _currentWaiterId es null, mostramos un indicador de carga
           if (_currentWaiterId == null && tables.isEmpty) 
             const Center(child: CircularProgressIndicator()) 
           else 
@@ -455,13 +464,29 @@ class _MeseroScreenState extends State<MeseroScreen> {
               ? const Center(child: Text("No tienes pedidos activos"))
               : Column(
                   children: myOrders.map((orderRow) {
-                    // CORRECCIÓN CLAVE: Aseguramos que 'status' sea String antes de usarlo
-                    final status = OrderStatusMapper.fromDb(orderRow['status']?.toString() ?? 'pendiente');
+                    // Usamos la relación anidada a 'detalle_pedido'
+                    final itemsData = List<Map<String, dynamic>>.from(orderRow['detalle_pedido'] ?? const []); 
+                    
+                    int totalItems = 0;
                     final total = (orderRow['total'] as num?)?.toInt() ?? 0;
                     
-                    // Aseguramos que order_items no sea nulo y sea una lista válida
-                    final items = List<Map<String, dynamic>>.from(orderRow['order_items'] ?? const []); 
-                    final mesa = "Mesa ${orderRow['table_number']}";
+                    final List<Map<String, dynamic>> processedItems = itemsData.map((itemDetail) {
+                        // Accedemos a las columnas renombradas en español
+                        final name = itemDetail['nombre_producto'] ?? 'Producto Desconocido';
+                        final quantity = (itemDetail['cantidad'] as num?)?.toInt() ?? 0; 
+                        
+                        totalItems += quantity;
+                        
+                        return {
+                            'name': name,
+                            'quantity': quantity,
+                            'status': itemDetail['estado_producto']?.toString() ?? 'pendiente',
+                        };
+                    }).toList();
+
+
+                    final status = OrderStatusMapper.fromDb(orderRow['estado']?.toString() ?? 'pendiente');
+                    final mesa = "Mesa ${orderRow['numero_mesa']}"; // Usamos 'numero_mesa'
 
                     return Card(
                       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -470,10 +495,10 @@ class _MeseroScreenState extends State<MeseroScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            ListTile(
+                            ExpansionTile(
                               leading: const Icon(Icons.restaurant),
-                              title: Text(mesa),
-                              subtitle: Text("${items.length} productos - \$${total.toString()}"),
+                              title: Text('Pedido #${orderRow['id']} - $mesa'),
+                              subtitle: Text("$totalItems productos - \$${total.toString()}"),
                               trailing: Container(
                                 padding: const EdgeInsets.all(6),
                                 decoration: BoxDecoration(
@@ -485,6 +510,23 @@ class _MeseroScreenState extends State<MeseroScreen> {
                                   style: const TextStyle(color: Colors.white),
                                 ),
                               ),
+                              children: processedItems.map((item) {
+                                final itemStatus = OrderStatusMapper.fromDb(item['status'] as String);
+                                return ListTile(
+                                  title: Text("${item['name']} x${item['quantity']}"),
+                                  trailing: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: getStatusColor(itemStatus),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      getStatusText(itemStatus),
+                                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
                             ),
                             const SizedBox(height: 6),
                             if (status != OrderStatus.entregado)
