@@ -57,7 +57,7 @@ class _MeseroScreenState extends State<MeseroScreen> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null || user.email == null) {
       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Error: Usuario no autenticado o email no disponible.")),
         );
       }

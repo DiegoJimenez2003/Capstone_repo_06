@@ -25,8 +25,11 @@ class _CocinaScreenState extends State<CocinaScreen> {
   }
 
   Future<void> _cargarPedidos() async {
+    // Usamos fetchAllOrdersWithItems que usa 'pedidos' y 'detalle_pedido'
     final data = await _svc.fetchAllOrdersWithItems();
-    setState(() => pedidos = data);
+    if (mounted) {
+      setState(() => pedidos = data);
+    }
   }
 
   Future<void> _actualizarEstadoProducto(String itemId, String nuevoEstado) async {
@@ -34,13 +37,17 @@ class _CocinaScreenState extends State<CocinaScreen> {
       await _svc.updateProductStatus(itemId, nuevoEstado);
       await _cargarPedidos();
       final label = OrderStatusMapper.fromDb(nuevoEstado).label;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("✅ Estado actualizado a '$label'")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("✅ Estado actualizado a '$label'")),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("❌ Error al actualizar: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("❌ Error al actualizar: $e")),
+        );
+      }
     }
   }
 
@@ -82,27 +89,40 @@ class _CocinaScreenState extends State<CocinaScreen> {
           : ListView(
               padding: const EdgeInsets.all(12),
               children: pedidos.map((pedido) {
-                final items = List<Map<String, dynamic>>.from(pedido['order_items']);
+                // Usamos 'detalle_pedido' para la relación
+                final items = List<Map<String, dynamic>>.from(pedido['detalle_pedido'] ?? const []); 
+                // Usamos 'estado'
                 final orderStatusValue =
-                    OrderStatusMapper.normalize(pedido['status'] ?? 'pendiente');
+                    OrderStatusMapper.normalize(pedido['estado'] ?? 'pendiente');
                 final orderStatus = OrderStatusMapper.fromDb(orderStatusValue);
+                
+                // Usamos 'mesero_id' y 'numero_mesa'
+                final waiterDisplay = pedido['mesero_id']?.toString() ?? 'N/A';
+                final mesaNumber = pedido['numero_mesa']?.toString() ?? 'N/A';
+                
+                final total = (pedido['total'] as num?)?.toStringAsFixed(0) ?? '0';
 
                 return Card(
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   elevation: 2,
                   child: ExpansionTile(
+                    // Usamos 'numero_mesa' y 'mesero_id'
                     title: Text(
-                      "Mesa ${pedido['table_number']} - ${pedido['waiter']}",
+                      "Mesa ${mesaNumber} - Mesero ID: ${waiterDisplay}",
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(
-                      "Total: \$${pedido['total']} • Estado: ${orderStatus.label}",
+                      "Total: \$${total} • Estado: ${orderStatus.label}",
                       style: const TextStyle(color: Colors.black54),
                     ),
                     children: items.map((item) {
+                      // Usamos 'estado_producto'
                       final estado = OrderStatusMapper.normalize(
-                          item['product_status'] ?? 'pendiente');
+                          item['estado_producto'] ?? 'pendiente');
                       final statusEnum = OrderStatusMapper.fromDb(estado);
+                      // Usamos 'nombre_producto' y 'cantidad'
+                      final itemName = item['nombre_producto'] ?? 'Producto Desconocido'; 
+                      final itemQuantity = (item['cantidad'] as num?)?.toInt() ?? 1; 
 
                       // Filtramos los estados permitidos para el dropdown
                       final allowedStatuses = _statusOptions;
@@ -114,7 +134,7 @@ class _CocinaScreenState extends State<CocinaScreen> {
                           : null;
 
                       return ListTile(
-                        title: Text("${item['name']} (${item['quantity']}x)"),
+                        title: Text("${itemName} (${itemQuantity}x)"),
                         subtitle: Row(
                           children: [
                             Container(
@@ -160,8 +180,9 @@ class _CocinaScreenState extends State<CocinaScreen> {
                                         .toList(),
                                     onChanged: (value) {
                                       if (value != null && value != estado) {
+                                        // Usamos 'id' de detalle_pedido para actualizar
                                         _actualizarEstadoProducto(
-                                            item['id'], value);
+                                            item['id']?.toString() ?? '', value);
                                       }
                                     },
                                   ),
