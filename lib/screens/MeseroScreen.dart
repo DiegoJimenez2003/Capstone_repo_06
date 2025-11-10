@@ -43,7 +43,6 @@ class _MeseroScreenState extends State<MeseroScreen> {
   int? selectedTable;
   String customerGender = '';
 
-  // --- Lista de productos cargados desde Supabase ---
   List<Map<String, dynamic>> _productos = [];
   bool _loadingProductos = false;
 
@@ -54,22 +53,19 @@ class _MeseroScreenState extends State<MeseroScreen> {
     _loadProductos();
   }
 
-  /// 🔹 Cargar productos de la tabla "producto"
   Future<void> _loadProductos() async {
     setState(() => _loadingProductos = true);
     try {
       final data = await _svc.fetchProductos();
       setState(() => _productos = data);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error al cargar productos: $e")),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Error al cargar productos: $e")));
     } finally {
       setState(() => _loadingProductos = false);
     }
   }
 
-  /// 🔹 Inicializar datos del mesero autenticado
   Future<void> _initializeMeseroData() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null || user.email == null) {
@@ -116,7 +112,6 @@ class _MeseroScreenState extends State<MeseroScreen> {
     }
   }
 
-  /// 🔹 Crear un pedido con productos desde Supabase
   Future<void> submitOrder() async {
     if (selectedTable == null ||
         currentOrder.isEmpty ||
@@ -196,6 +191,40 @@ class _MeseroScreenState extends State<MeseroScreen> {
     });
   }
 
+  /// 🔹 Marcar pedido como entregado
+  Future<void> _marcarComoEntregado(String orderId) async {
+    try {
+      await _svc.updateOrderStatus(orderId, OrderStatus.entregado);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("🍽️ Pedido marcado como entregado")),
+      );
+      await _cargarMisPedidos();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Error al actualizar estado: $e")),
+      );
+    }
+  }
+
+  /// 🔹 Cerrar sesión y volver al login
+  Future<void> _cerrarSesion() async {
+    try {
+      await _svc.logOut();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("👋 Sesión cerrada correctamente")),
+      );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const Loginscreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Error al cerrar sesión: $e")));
+    }
+  }
+
   // ==================== INTERFAZ ====================
 
   @override
@@ -204,9 +233,24 @@ class _MeseroScreenState extends State<MeseroScreen> {
       appBar: AppBar(
         title: Text("Panel del Mesero (${_currentWaiterEmail})"),
         backgroundColor: Colors.orangeAccent,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const Loginscreen()),
+            );
+          },
+        ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Cerrar sesión',
+            onPressed: _cerrarSesion,
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
+            tooltip: 'Actualizar',
             onPressed: () {
               _initializeMeseroData();
               _loadProductos();
@@ -240,9 +284,8 @@ class _MeseroScreenState extends State<MeseroScreen> {
                     final table = tables[index];
                     return ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: table.status == 'ocupada'
-                            ? Colors.grey
-                            : Colors.white,
+                        backgroundColor:
+                            table.status == 'ocupada' ? Colors.grey : Colors.white,
                         foregroundColor: Colors.black,
                         side: const BorderSide(color: Colors.orange),
                       ),
@@ -258,87 +301,53 @@ class _MeseroScreenState extends State<MeseroScreen> {
                                 builder: (_) => StatefulBuilder(
                                   builder: (context, setDialogState) {
                                     return AlertDialog(
-                                      title: Text(
-                                          'Nuevo Pedido - Mesa ${table.number}'),
+                                      title: Text('Nuevo Pedido - Mesa ${table.number}'),
                                       content: SizedBox(
                                         width: double.maxFinite,
                                         height: 450,
                                         child: Column(
                                           children: [
                                             DropdownButton<String>(
-                                              value: customerGender.isEmpty
-                                                  ? null
-                                                  : customerGender,
-                                              hint: const Text(
-                                                  'Género del cliente'),
+                                              value: customerGender.isEmpty ? null : customerGender,
+                                              hint: const Text('Género del cliente'),
                                               items: const [
                                                 DropdownMenuItem(
-                                                    value: 'Hombre',
-                                                    child: Text('Hombre')),
+                                                    value: 'Hombre', child: Text('Hombre')),
                                                 DropdownMenuItem(
-                                                    value: 'Mujer',
-                                                    child: Text('Mujer')),
+                                                    value: 'Mujer', child: Text('Mujer')),
                                               ],
                                               onChanged: (v) =>
-                                                  setDialogState(() =>
-                                                      customerGender = v ?? ''),
+                                                  setDialogState(() => customerGender = v ?? ''),
                                             ),
                                             const SizedBox(height: 10),
-
-                                            // 🔹 Menú dinámico desde Supabase
                                             Expanded(
                                               child: ListView(
                                                 children: _productos.isEmpty
-                                                    ? [
-                                                        const Text(
-                                                            "No hay productos disponibles")
-                                                      ]
+                                                    ? [const Text("No hay productos disponibles")]
                                                     : _productos
-                                                        .fold<
-                                                                Map<String,
-                                                                    List<Map<String, dynamic>>>>(
-                                                            {}, (map, p) {
-                                                            final cat = p[
-                                                                    'categoria'] ??
-                                                                'Sin categoría';
-                                                            map.putIfAbsent(
-                                                                cat, () => []);
+                                                        .fold<Map<String, List<Map<String, dynamic>>>>({}, (map, p) {
+                                                            final cat = p['categoria'] ?? 'Sin categoría';
+                                                            map.putIfAbsent(cat, () => []);
                                                             map[cat]!.add(p);
                                                             return map;
                                                           })
                                                         .entries
-                                                        .map((entry) =>
-                                                            ExpansionTile(
-                                                              title: Text(entry
-                                                                  .key
-                                                                  .toUpperCase()),
-                                                              children: entry
-                                                                  .value
-                                                                  .map((producto) {
+                                                        .map((entry) => ExpansionTile(
+                                                              title: Text(entry.key.toUpperCase()),
+                                                              children: entry.value.map((producto) {
                                                                 return ListTile(
-                                                                  title: Text(
-                                                                      producto[
-                                                                          'nombre_producto']),
-                                                                  subtitle:
-                                                                      Text(NumberFormat.currency(
-                                                                              locale:
-                                                                                  'es_CL',
-                                                                              symbol:
-                                                                                  '\$',
-                                                                              decimalDigits:
-                                                                                  0)
-                                                                          .format(
-                                                                              producto['precio'])),
-                                                                  trailing:
-                                                                      IconButton(
-                                                                    icon: const Icon(
-                                                                        Icons
-                                                                            .add_circle),
-                                                                    onPressed:
-                                                                        () {
-                                                                      setDialogState(() =>
-                                                                          addItemToOrder(
-                                                                              producto));
+                                                                  title: Text(producto['nombre_producto']),
+                                                                  subtitle: Text(
+                                                                    NumberFormat.currency(
+                                                                            locale: 'es_CL',
+                                                                            symbol: '\$',
+                                                                            decimalDigits: 0)
+                                                                        .format(producto['precio']),
+                                                                  ),
+                                                                  trailing: IconButton(
+                                                                    icon: const Icon(Icons.add_circle),
+                                                                    onPressed: () {
+                                                                      setDialogState(() => addItemToOrder(producto));
                                                                     },
                                                                   ),
                                                                 );
@@ -351,38 +360,24 @@ class _MeseroScreenState extends State<MeseroScreen> {
                                             if (currentOrder.isNotEmpty)
                                               Expanded(
                                                 child: ListView(
-                                                  children: currentOrder
-                                                      .map((item) {
+                                                  children: currentOrder.map((item) {
                                                     return ListTile(
-                                                      title: Text(
-                                                          "${item.name} x${item.quantity}"),
+                                                      title: Text("${item.name} x${item.quantity}"),
                                                       trailing: Row(
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
+                                                        mainAxisSize: MainAxisSize.min,
                                                         children: [
                                                           IconButton(
-                                                            icon: const Icon(
-                                                                Icons.remove),
-                                                            onPressed: () =>
-                                                                setDialogState(() =>
-                                                                    removeItemFromOrder(
-                                                                        item)),
+                                                            icon: const Icon(Icons.remove),
+                                                            onPressed: () => setDialogState(() => removeItemFromOrder(item)),
                                                           ),
                                                           IconButton(
-                                                            icon: const Icon(
-                                                                Icons.add),
-                                                            onPressed: () =>
-                                                                setDialogState(() =>
-                                                                    addItemToOrder({
-                                                                      'id_producto':
-                                                                          item.idProducto,
-                                                                      'nombre_producto':
-                                                                          item.name,
-                                                                      'precio': item
-                                                                          .price,
-                                                                      'categoria':
-                                                                          item.category,
-                                                                    })),
+                                                            icon: const Icon(Icons.add),
+                                                            onPressed: () => setDialogState(() => addItemToOrder({
+                                                              'id_producto': item.idProducto,
+                                                              'nombre_producto': item.name,
+                                                              'precio': item.price,
+                                                              'categoria': item.category,
+                                                            })),
                                                           ),
                                                         ],
                                                       ),
@@ -394,17 +389,14 @@ class _MeseroScreenState extends State<MeseroScreen> {
                                             Text(
                                               "Total: ${NumberFormat.currency(locale: 'es_CL', symbol: '\$', decimalDigits: 0).format(currentOrder.fold<double>(0, (s, i) => s + i.price * i.quantity))}",
                                               style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 18),
+                                                  fontWeight: FontWeight.bold, fontSize: 18),
                                             ),
                                           ],
                                         ),
                                       ),
                                       actions: [
                                         TextButton(
-                                          onPressed: () {
-                                            Navigator.of(context).pop();
-                                          },
+                                          onPressed: () => Navigator.of(context).pop(),
                                           child: const Text('Cancelar'),
                                         ),
                                         ElevatedButton(
@@ -412,8 +404,7 @@ class _MeseroScreenState extends State<MeseroScreen> {
                                               ? null
                                               : () async {
                                                   await submitOrder();
-                                                  if (mounted)
-                                                    Navigator.of(context).pop();
+                                                  if (mounted) Navigator.of(context).pop();
                                                 },
                                           child: const Text('Enviar'),
                                         ),
@@ -429,29 +420,34 @@ class _MeseroScreenState extends State<MeseroScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // 🔹 Pedidos existentes
+                // 🔹 Pedidos existentes (con botón de entregado)
                 const Text("Mis Pedidos:",
-                    style:
-                        TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 10),
                 myOrders.isEmpty
                     ? const Center(child: Text("No tienes pedidos activos"))
                     : Column(
                         children: myOrders.map((orderRow) {
-                          final itemsData = List<Map<String, dynamic>>.from(
-                              orderRow['detalle_pedido'] ?? const []);
-                          final total =
-                              (orderRow['total'] as num?)?.toInt() ?? 0;
-                          final status = OrderStatusMapper.fromDb(
-                              orderRow['estado']?.toString() ?? 'pendiente');
+                          final itemsData = List<Map<String, dynamic>>.from(orderRow['detalle_pedido'] ?? const []);
+                          final total = (orderRow['total'] as num?)?.toInt() ?? 0;
+                          final status = OrderStatusMapper.fromDb(orderRow['estado']?.toString() ?? 'pendiente');
                           final mesa = "Mesa ${orderRow['numero_mesa']}";
+
                           return Card(
                             margin: const EdgeInsets.symmetric(vertical: 8),
                             child: ListTile(
-                              title: Text(
-                                  "$mesa - ${NumberFormat.currency(locale: 'es_CL', symbol: '\$', decimalDigits: 0).format(total)}"),
-                              subtitle: Text(
-                                  "${itemsData.length} productos - ${status.label}"),
+                              title: Text("$mesa - ${NumberFormat.currency(locale: 'es_CL', symbol: '\$', decimalDigits: 0).format(total)}"),
+                              subtitle: Text("${itemsData.length} productos - ${status.label}"),
+                              trailing: status == OrderStatus.entregado
+                                  ? const Icon(Icons.check_circle, color: Colors.green)
+                                  : ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent),
+                                      icon: const Icon(Icons.check),
+                                      label: const Text("Entregado"),
+                                      onPressed: () async {
+                                        await _marcarComoEntregado(orderRow['id']);
+                                      },
+                                    ),
                             ),
                           );
                         }).toList(),

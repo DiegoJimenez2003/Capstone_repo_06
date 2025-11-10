@@ -428,25 +428,25 @@ class _AdminScreenState extends State<AdminScreen> {
                 )
               else
                 GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _productos.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 1.2,
-                  ),
-                  itemBuilder: (context, i) {
-                    final p = _productos[i];
-                    return _buildProductCard(
-                      nombre: p['nombre_producto'] ?? 'Sin nombre',
-                      categoria: p['categoria'] ?? 'Sin categoría',
-                      precio: (p['precio'] as num?)?.toDouble() ?? 0.0,
-                      disponible: (p['disponible']?.toString() ?? 'S') == 'S',
-                    );
-                  },
-                ),
+  shrinkWrap: true,
+  physics: const NeverScrollableScrollPhysics(),
+  itemCount: _productos.length,
+  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+    crossAxisCount: 2,
+    mainAxisSpacing: 12,
+    crossAxisSpacing: 12,
+    childAspectRatio: 0.9, // 🔽 antes era 1.2, esto da más alto y evita overflow
+  ),
+  itemBuilder: (context, i) {
+    final p = _productos[i];
+    return _buildProductCard(
+      nombre: p['nombre_producto'] ?? 'Sin nombre',
+      categoria: p['categoria'] ?? 'Sin categoría',
+      precio: (p['precio'] as num?)?.toDouble() ?? 0.0,
+      disponible: (p['disponible']?.toString() ?? 'S') == 'S',
+    );
+  },
+),
 
               const SizedBox(height: 40),
 
