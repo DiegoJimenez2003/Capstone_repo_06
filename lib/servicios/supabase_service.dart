@@ -1,10 +1,12 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/order_status.dart';
-import '../models/mesa_status.dart'; 
-import '../models/mesa_data.dart'; 
+import '../models/mesa_status.dart';
+import '../models/mesa_data.dart';
+import 'package:uuid/uuid.dart';
 
 class SupabaseService {
   SupabaseClient get _client => Supabase.instance.client;
+  final _uuid = const Uuid();
 
   /// =====================
   /// 🔹 OBTENER PERFIL DE MESERO (tabla usuario)
@@ -12,16 +14,27 @@ class SupabaseService {
   Future<Map<String, dynamic>?> fetchMeseroProfile(String email) async {
     final data = await _client
         .from('usuario')
-        .select('id_usuario, nombre, correo, id_rol') 
+        .select('id_usuario, nombre, correo, id_rol')
         .eq('correo', email)
         .maybeSingle();
 
-    if (data == null) {
-      return null;
-    }
+    if (data == null) return null;
     return data;
   }
-  
+
+  /// =====================
+  /// 🔹 PRODUCTOS (tabla producto)
+  /// =====================
+  Future<List<Map<String, dynamic>>> fetchProductos() async {
+    final data = await _client
+        .from('producto')
+        .select()
+        .eq('disponible', 'S')
+        .order('categoria', ascending: true);
+
+    return List<Map<String, dynamic>>.from(data);
+  }
+
   /// =====================
   /// 🔹 CREAR PEDIDO (tabla pedidos)
   /// =====================
@@ -32,9 +45,9 @@ class SupabaseService {
     required int total,
     required String status,
   }) async {
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final id = _uuid.v4(); // Genera UUID (TEXT)
     final insertPayload = {
-      'id': id, 
+      'id': id,
       'numero_mesa': tableNumber,
       'estado': status,
       'total': total,
@@ -62,15 +75,15 @@ class SupabaseService {
   Future<void> addOrderItems(
       String orderId, List<Map<String, dynamic>> itemsRows) async {
     final mappedItems = itemsRows.map((m) {
-      final id = DateTime.now().microsecondsSinceEpoch.toString();
+      final id = _uuid.v4();
       return {
         'id': id,
         'id_pedido': orderId,
-        'nombre_producto': m['name'],
-        'categoria': m['category'],
-        'precio': m['price'],
-        'cantidad': m['quantity'],
-        'estado_producto': m['product_status'] ?? 'pendiente',
+        'nombre_producto': m['nombre_producto'] ?? m['name'],
+        'categoria': m['categoria'] ?? m['category'],
+        'precio': m['precio'] ?? m['price'],
+        'cantidad': m['cantidad'] ?? m['quantity'],
+        'estado_producto': m['estado_producto'] ?? m['product_status'] ?? 'pendiente',
         'hora_inicio_prep': DateTime.now().toIso8601String(),
       };
     }).toList();
@@ -79,14 +92,14 @@ class SupabaseService {
   }
 
   /// =====================
-  /// 🔹 OBTENER PEDIDOS DEL MESERO (pedidos)
+  /// 🔹 OBTENER PEDIDOS DEL MESERO
   /// =====================
   Future<List<Map<String, dynamic>>> fetchMyOrdersWithItems(
       String waiterIdString) async {
     final data = await _client
         .from('pedidos')
-        .select(''' 
-          id, 
+        .select('''
+          id,
           numero_mesa,
           mesero_id,
           estado,
@@ -113,7 +126,7 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> fetchAllOrdersWithItems() async {
     final data = await _client
         .from('pedidos')
-        .select(''' 
+        .select('''
           id,
           numero_mesa,
           mesero_id,
@@ -135,7 +148,7 @@ class SupabaseService {
   }
 
   /// =====================
-  /// 🔹 ACTUALIZAR ESTADO DE UN PRODUCTO
+  /// 🔹 ACTUALIZAR ESTADO DE UN PRODUCTO (detalle_pedido)
   /// =====================
   Future<void> updateProductStatus(String itemId, String newStatus) async {
     final normalizedStatus = OrderStatusMapper.normalize(newStatus);
@@ -147,9 +160,7 @@ class SupabaseService {
         .select('id_pedido')
         .maybeSingle();
 
-    if (updatedRow == null || updatedRow['id_pedido'] == null) {
-      return;
-    }
+    if (updatedRow == null || updatedRow['id_pedido'] == null) return;
 
     final orderId = updatedRow['id_pedido'] as String;
 
@@ -159,15 +170,12 @@ class SupabaseService {
         .eq('id_pedido', orderId);
 
     final orderStatus = _determineOrderStatusFromItems(items);
-
     await updateOrderStatus(orderId, orderStatus);
   }
 
   OrderStatus _determineOrderStatusFromItems(dynamic itemsResponse) {
     final items = List<Map<String, dynamic>>.from(itemsResponse ?? const []);
-    if (items.isEmpty) {
-      return OrderStatus.pendiente;
-    }
+    if (items.isEmpty) return OrderStatus.pendiente;
 
     const priorities = {
       OrderStatus.pendiente: 0,
@@ -184,12 +192,9 @@ class SupabaseService {
       final rawStatus = (item['estado_producto'] as String?) ?? 'pendiente';
       final normalized = OrderStatusMapper.fromDb(rawStatus);
 
-      if (!priorities.containsKey(normalized)) {
-        continue;
-      }
+      if (!priorities.containsKey(normalized)) continue;
 
       final priority = priorities[normalized]!;
-
       if (priority < minPriority) {
         minPriority = priority;
         resultingStatus = normalized;
@@ -200,33 +205,34 @@ class SupabaseService {
   }
 
   /// =====================
-  /// 🔹 OBTENER MESAS (Filtrado por ID_MESERO INTEGER)
+  /// 🔹 OBTENER MESAS (por ID_MESERO)
   /// =====================
-  Future<List<TableData>> fetchTables(int waiterId) async { 
-  try {
-    final data = await _client
-        .from('mesa')
-        .select()
-        .eq('id_mesero', waiterId)
-        .order('numero_mesa', ascending: true);
+  Future<List<TableData>> fetchTables(int waiterId) async {
+    try {
+      final data = await _client
+          .from('mesa')
+          .select()
+          .eq('id_mesero', waiterId)
+          .order('numero_mesa', ascending: true);
 
-    final List<TableData> tables = List<TableData>.from(
-      data.map((mesa) => TableData(
-        id: mesa['id_mesa'] as int,
-        number: mesa['numero_mesa'] as int,
-        status: mesa['estado'] as String,
-        capacity: mesa['capacidad'] as int,
-        waiter: mesa['id_mesero'] != null ? "Mesero ${mesa['id_mesero']}" : null,
-        waiterId: mesa['id_mesero'] as int?,
-      )),
-    );
+      final List<TableData> tables = List<TableData>.from(
+        data.map((mesa) => TableData(
+              id: mesa['id_mesa'] as int,
+              number: mesa['numero_mesa'] as int,
+              status: mesa['estado'] as String,
+              capacity: mesa['capacidad'] as int,
+              waiter: mesa['id_mesero'] != null
+                  ? "Mesero ${mesa['id_mesero']}"
+                  : null,
+              waiterId: mesa['id_mesero'] as int?,
+            )),
+      );
 
-    return tables;
-  } catch (e) {
-    rethrow;
+      return tables;
+    } catch (e) {
+      rethrow;
+    }
   }
-}
-
 
   /// =====================
   /// 🔹 ACTUALIZAR ESTADO DE LA MESA
@@ -251,7 +257,7 @@ class SupabaseService {
         .update({'estado': status.toDb()})
         .eq('id', orderId);
   }
-  
+
   /// =====================
   /// 🔹 CERRAR SESIÓN
   /// =====================
