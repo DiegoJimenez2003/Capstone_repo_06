@@ -1,32 +1,61 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/order_status.dart';
+import '../models/mesa_status.dart';
+import '../models/mesa_data.dart';
+import 'package:uuid/uuid.dart';
 
 class SupabaseService {
   SupabaseClient get _client => Supabase.instance.client;
+  final _uuid = const Uuid();
 
-  /// =====================
-  /// 🔹 CREAR PEDIDO
-  /// =====================
+  /// OBTENER PERFIL DE MESERO (tabla usuario)
+
+  Future<Map<String, dynamic>?> fetchMeseroProfile(String email) async {
+    final data = await _client
+        .from('usuario')
+        .select('id_usuario, nombre, correo, id_rol')
+        .eq('correo', email)
+        .maybeSingle();
+
+    if (data == null) return null;
+    return data;
+  }
+
+
+  /// PRODUCTOS (tabla producto)
+
+  Future<List<Map<String, dynamic>>> fetchProductos() async {
+    final data = await _client
+        .from('producto')
+        .select()
+        .eq('disponible', 'S')
+        .order('categoria', ascending: true);
+
+    return List<Map<String, dynamic>>.from(data);
+  }
+
+  /// CREAR PEDIDO (tabla pedidos)
+
   Future<String> createOrder({
     required int tableNumber,
-    required String waiter,
+    required String waiterId, // id_usuario del mesero (TEXT)
     required String customerGender,
     required int total,
-    required String status, // 'pendiente', 'listo', etc.
+    required String status,
   }) async {
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final id = _uuid.v4(); // Genera UUID (TEXT)
     final insertPayload = {
       'id': id,
-      'table_number': tableNumber,
-      'status': status,
+      'numero_mesa': tableNumber,
+      'estado': status,
       'total': total,
-      'waiter': waiter,
-      'customer_gender': customerGender,
-      'timestamp': DateTime.now().toIso8601String(),
+      'mesero_id': waiterId,
+      'genero_cliente': customerGender,
+      'fecha_pedido': DateTime.now().toIso8601String(),
     };
 
     final response = await _client
-        .from('orders')
+        .from('pedidos')
         .insert(insertPayload)
         .select('id')
         .maybeSingle();
@@ -38,123 +67,111 @@ class SupabaseService {
     return response['id'].toString();
   }
 
-  /// =====================
-  /// 🔹 AGREGAR PRODUCTOS
-  /// =====================
+  /// AGREGAR PRODUCTOS (tabla detalle_pedido)
+
   Future<void> addOrderItems(
       String orderId, List<Map<String, dynamic>> itemsRows) async {
-    final withOrderId = itemsRows.map((m) {
-      final id = DateTime.now().microsecondsSinceEpoch.toString();
+    final mappedItems = itemsRows.map((m) {
+      final id = _uuid.v4();
       return {
-        ...m,
         'id': id,
-        'order_id': orderId,
+        'id_pedido': orderId,
+        'nombre_producto': m['nombre_producto'] ?? m['name'],
+        'categoria': m['categoria'] ?? m['category'],
+        'precio': m['precio'] ?? m['price'],
+        'cantidad': m['cantidad'] ?? m['quantity'],
+        'estado_producto': m['estado_producto'] ?? m['product_status'] ?? 'pendiente',
+        'hora_inicio_prep': DateTime.now().toIso8601String(),
       };
     }).toList();
 
-    await _client.from('order_items').insert(withOrderId);
+    await _client.from('detalle_pedido').insert(mappedItems);
   }
 
-  /// =====================
-  /// 🔹 OBTENER PEDIDOS DEL MESERO
-  /// =====================
+
+  /// OBTENER PEDIDOS DEL MESERO
+
   Future<List<Map<String, dynamic>>> fetchMyOrdersWithItems(
-      String waiter) async {
+      String waiterIdString) async {
     final data = await _client
-        .from('orders')
+        .from('pedidos')
         .select('''
           id,
-          table_number,
-          waiter,
-          customer_gender,
-          status,
+          numero_mesa,
+          mesero_id,
+          estado,
           total,
-          timestamp,
-          order_items(
+          fecha_pedido,
+          detalle_pedido (
             id,
-            name,
-            category,
-            price,
-            quantity,
-            product_status
+            nombre_producto,
+            categoria,
+            precio,
+            cantidad,
+            estado_producto
           )
         ''')
-        .eq('waiter', waiter)
-        .order('timestamp', ascending: false);
+        .eq('mesero_id', waiterIdString)
+        .order('fecha_pedido', ascending: false);
 
     return List<Map<String, dynamic>>.from(data);
   }
 
-  /// =====================
-  /// 🔹 ACTUALIZAR ESTADO DE PEDIDO
-  /// =====================
-  Future<void> updateOrderStatus(String orderId, OrderStatus status) async {
-    await _client
-        .from('orders')
-        .update({'status': status.toDb()})
-        .eq('id', orderId);
-  }
+  /// OBTENER TODOS LOS PEDIDOS (COCINA/ADMIN)
 
-  /// =====================
-  /// 🔹 OBTENER TODOS LOS PEDIDOS (COCINA)
-  /// =====================
   Future<List<Map<String, dynamic>>> fetchAllOrdersWithItems() async {
     final data = await _client
-        .from('orders')
+        .from('pedidos')
         .select('''
           id,
-          table_number,
-          waiter,
-          status,
+          numero_mesa,
+          mesero_id,
+          estado,
           total,
-          order_items (
+          fecha_pedido,
+          detalle_pedido (
             id,
-            name,
-            category,
-            price,
-            quantity,
-            product_status
+            nombre_producto,
+            categoria,
+            precio,
+            cantidad,
+            estado_producto
           )
         ''')
-        .order('timestamp', ascending: false);
+        .order('fecha_pedido', ascending: false);
 
     return List<Map<String, dynamic>>.from(data);
   }
 
-  /// =====================
-  /// 🔹 ACTUALIZAR ESTADO DE UN PRODUCTO
-  /// =====================
+
+  /// ACTUALIZAR ESTADO DE UN PRODUCTO (detalle_pedido)
+
   Future<void> updateProductStatus(String itemId, String newStatus) async {
     final normalizedStatus = OrderStatusMapper.normalize(newStatus);
 
     final updatedRow = await _client
-        .from('order_items')
-        .update({'product_status': normalizedStatus})
+        .from('detalle_pedido')
+        .update({'estado_producto': normalizedStatus})
         .eq('id', itemId)
-        .select('order_id')
+        .select('id_pedido')
         .maybeSingle();
 
-    if (updatedRow == null || updatedRow['order_id'] == null) {
-      return;
-    }
+    if (updatedRow == null || updatedRow['id_pedido'] == null) return;
 
-    final orderId = updatedRow['order_id'] as String;
+    final orderId = updatedRow['id_pedido'] as String;
 
     final items = await _client
-        .from('order_items')
-        .select('product_status')
-        .eq('order_id', orderId);
+        .from('detalle_pedido')
+        .select('estado_producto')
+        .eq('id_pedido', orderId);
 
     final orderStatus = _determineOrderStatusFromItems(items);
-
     await updateOrderStatus(orderId, orderStatus);
   }
 
   OrderStatus _determineOrderStatusFromItems(dynamic itemsResponse) {
     final items = List<Map<String, dynamic>>.from(itemsResponse ?? const []);
-    if (items.isEmpty) {
-      return OrderStatus.pendiente;
-    }
+    if (items.isEmpty) return OrderStatus.pendiente;
 
     const priorities = {
       OrderStatus.pendiente: 0,
@@ -168,15 +185,12 @@ class SupabaseService {
     OrderStatus? resultingStatus;
 
     for (final item in items) {
-      final rawStatus = (item['product_status'] as String?) ?? 'pendiente';
+      final rawStatus = (item['estado_producto'] as String?) ?? 'pendiente';
       final normalized = OrderStatusMapper.fromDb(rawStatus);
 
-      if (!priorities.containsKey(normalized)) {
-        continue;
-      }
+      if (!priorities.containsKey(normalized)) continue;
 
       final priority = priorities[normalized]!;
-
       if (priority < minPriority) {
         minPriority = priority;
         resultingStatus = normalized;
@@ -184,5 +198,65 @@ class SupabaseService {
     }
 
     return resultingStatus ?? OrderStatus.pendiente;
+  }
+
+
+  /// OBTENER MESAS (por ID_MESERO)
+
+  Future<List<TableData>> fetchTables(int waiterId) async {
+    try {
+      final data = await _client
+          .from('mesa')
+          .select()
+          .eq('id_mesero', waiterId)
+          .order('numero_mesa', ascending: true);
+
+      final List<TableData> tables = List<TableData>.from(
+        data.map((mesa) => TableData(
+              id: mesa['id_mesa'] as int,
+              number: mesa['numero_mesa'] as int,
+              status: mesa['estado'] as String,
+              capacity: mesa['capacidad'] as int,
+              waiter: mesa['id_mesero'] != null
+                  ? "Mesero ${mesa['id_mesero']}"
+                  : null,
+              waiterId: mesa['id_mesero'] as int?,
+            )),
+      );
+
+      return tables;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// ACTUALIZAR ESTADO DE LA MESA
+
+  Future<void> updateTableStatus(int tableId, TableStatus status) async {
+    try {
+      await _client
+          .from('mesa')
+          .update({'estado': status.toDb()})
+          .eq('id_mesa', tableId);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+
+  /// ACTUALIZAR ESTADO DE PEDIDO
+
+  Future<void> updateOrderStatus(String orderId, OrderStatus status) async {
+    await _client
+        .from('pedidos')
+        .update({'estado': status.toDb()})
+        .eq('id', orderId);
+  }
+
+
+  /// CERRAR SESIÓN
+
+  Future<void> logOut() async {
+    await _client.auth.signOut();
   }
 }

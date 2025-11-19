@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; 
+
 import '../screens/AdminScreen.dart';
 import '../screens/CocinaScreen.dart';
 import '../screens/MeseroScreen.dart';
+import '../servicios/supabase_service.dart'; 
 
 class Loginscreen extends StatefulWidget {
   const Loginscreen({super.key});
@@ -12,35 +15,95 @@ class Loginscreen extends StatefulWidget {
 }
 
 class _LoginscreenState extends State<Loginscreen> {
+  final _svc = SupabaseService();
   final TextEditingController _loginController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
   String? _selectedRole;
   String _estado = "";
 
-  void validaUser(String login, String password, BuildContext context) {
-    if (login == "duoc" && password == "duoc2025") {
-      _estado = "Inicio exitoso";
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Inicio de sesión exitoso")),
-      );
+  // Mapeo de Rol seleccionado (String) a id_rol (Integer) de la DB
+  final Map<String, int> _roleMap = {
+    'Administrador': 1,
+    'Mesero': 2,
+    'Cocinero': 3,
+  };
 
-      Widget nextScreen;
-      if (_selectedRole == "Mesero") {
-        nextScreen = MeseroScreen();
-      } else if (_selectedRole == "Cocinero") {
-        nextScreen = CocinaScreen();
-      } else {
-        nextScreen = AdminScreen();
+  // Función asíncrona para validar usuario y rol
+  Future<void> validaUser(String email, String password, BuildContext context) async {
+    final selectedRoleId = _roleMap[_selectedRole];
+
+    // 1. Validaciones iniciales
+    if (email.isEmpty || password.isEmpty || _selectedRole == null) {
+      _estado = "Ingrese credenciales completas y seleccione un rol.";
+      setState(() {});
+      return;
+    }
+
+    // 2. Intenta autenticar con Supabase Auth
+    try {
+      final SupabaseClient client = Supabase.instance.client;
+      
+      await client.auth.signInWithPassword(
+        email: email, 
+        password: password,
+      );
+      
+      // 3. Consulta el rol real en la tabla 'usuario'
+      final profileData = await _svc.fetchMeseroProfile(email);
+      
+      if (profileData == null) {
+        throw Exception("Perfil de usuario no encontrado. Asegúrese de que el correo esté registrado en la tabla 'usuario'.");
       }
 
-      Navigator.push(
+      final dbRoleId = profileData['id_rol'] as int;
+      final dbRoleName = profileData['nombre'] as String; // Usaremos el nombre real
+
+      // 4. Compara el rol de la DB con el rol seleccionado
+      if (dbRoleId != selectedRoleId) {
+        await client.auth.signOut(); // Cierra la sesión si el rol es incorrecto
+        
+        // Corregimos el mensaje para que sea conciso y no dependa del nombre
+        _estado = "Acceso denegado. El rol seleccionado no coincide con el rol asignado en la base de datos.";
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("❌ ERROR: Acceso denegado. Rol incorrecto (DB ID: ${dbRoleId})."))
+        );
+        setState(() {});
+        return;
+      }
+
+      // 5. Autenticación y validación de rol exitosas
+      _estado = "Inicio exitoso como ${_selectedRole}!";
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("✅ Inicio de sesión exitoso")),
+      );
+
+      // 6. Navegación basada en el rol validado
+      Widget nextScreen;
+      if (_selectedRole == "Mesero") {
+        nextScreen = const MeseroScreen();
+      } else if (_selectedRole == "Cocinero") {
+        nextScreen = const CocinaScreen();
+      } else {
+        nextScreen = const AdminScreen();
+      }
+
+      Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => nextScreen),
       );
-    } else {
-      _estado = "Error de credenciales";
+
+    } on AuthException catch (e) {
+      // 7. Manejo específico de errores de autenticación
+      _estado = "Error de autenticación: ${e.message}";
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("ERROR DE CREDENCIALES")),
+        SnackBar(content: Text("❌ ERROR: ${e.message}")),
+      );
+      setState(() {});
+    } catch (e) {
+      // 8. Manejo de errores de perfil/conexión
+      _estado = "Error en la validación de perfil: ${e.toString()}";
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Error en el servidor o perfil: ${e.toString()}")),
       );
       setState(() {});
     }
@@ -110,7 +173,7 @@ class _LoginscreenState extends State<Loginscreen> {
                     TextField(
                       controller: _loginController,
                       decoration: InputDecoration(
-                        labelText: "Usuario",
+                        labelText: "Usuario (Email)", // Indicamos que es el Email
                         prefixIcon: const Icon(Icons.person_outline),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -136,18 +199,14 @@ class _LoginscreenState extends State<Loginscreen> {
                     // Dropdown de rol
                     DropdownButtonFormField<String>(
                       decoration: InputDecoration(
-                        labelText: "Rol",
+                        labelText: "Rol Seleccionado",
                         prefixIcon: const Icon(Icons.work_outline),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
                       value: _selectedRole,
-                      items: <String>[
-                        'Mesero',
-                        'Cocinero',
-                        'Administrador'
-                      ].map((String value) {
+                      items: _roleMap.keys.map((String value) {
                         return DropdownMenuItem<String>(
                           value: value,
                           child: Text(value),
@@ -161,20 +220,13 @@ class _LoginscreenState extends State<Loginscreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Botón
+                    // Botón de Inicio de Sesión con validación de rol
                     SizedBox(
                       width: double.infinity,
                       height: 48,
                       child: ElevatedButton.icon(
-                        onPressed: () {
-                          if (_selectedRole == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text("Seleccione un rol")),
-                            );
-                            return;
-                          }
-                          validaUser(_loginController.text,
+                        onPressed: () async {
+                          await validaUser(_loginController.text,
                               _passController.text, context);
                         },
                         icon: const Icon(Icons.login, color: Colors.white),
@@ -196,7 +248,7 @@ class _LoginscreenState extends State<Loginscreen> {
                     Text(
                       _estado.isEmpty ? "" : "Estado: $_estado",
                       style: TextStyle(
-                        color: _estado.contains("Error")
+                        color: _estado.contains("Error") || _estado.contains("denegado")
                             ? Colors.red
                             : Colors.green,
                         fontWeight: FontWeight.bold,
