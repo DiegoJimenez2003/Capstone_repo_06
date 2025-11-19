@@ -16,17 +16,17 @@ class AdminScreen extends StatefulWidget {
 class _AdminScreenState extends State<AdminScreen> {
   final _svc = SupabaseService();
 
-  // --- Métricas del Dashboard (LO QUE YA TENÍAS) ---
+  // --- Métricas del Dashboard  ---
   int _todayOrders = 0;
   double _todayRevenue = 0.0;
   int _activeOrders = 0;
   List<Map<String, dynamic>> _activeOrdersList = [];
 
-  // --- NUEVO: Estado para Productos ---
+  // --- Estado para Productos ---
   List<Map<String, dynamic>> _productos = [];
   bool _loadingProductos = false;
 
-  // --- NUEVO: controladores del form de producto ---
+  // --- controladores del form de producto ---
   final _nombreCtrl = TextEditingController();
   final _precioCtrl = TextEditingController();
   final _categoriaCtrl = TextEditingController();
@@ -36,7 +36,7 @@ class _AdminScreenState extends State<AdminScreen> {
   void initState() {
     super.initState();
     _loadMetrics();
-    _loadProductos(); // NUEVO: traer catálogo al entrar
+    _loadProductos(); // traer catálogo al entrar
   }
 
   // ---------------- MÉTRICAS / PEDIDOS  ----------------
@@ -110,7 +110,7 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  // ---------------- NUEVO: CRUD BÁSICO DE PRODUCTOS ----------------
+  // CRUD BÁSICO DE PRODUCTOS ----------------
   Future<void> _loadProductos() async {
     setState(() => _loadingProductos = true);
     try {
@@ -435,7 +435,7 @@ class _AdminScreenState extends State<AdminScreen> {
     crossAxisCount: 2,
     mainAxisSpacing: 12,
     crossAxisSpacing: 12,
-    childAspectRatio: 0.9, // 🔽 antes era 1.2, esto da más alto y evita overflow
+    childAspectRatio: 0.9,
   ),
   itemBuilder: (context, i) {
     final p = _productos[i];
@@ -450,7 +450,7 @@ class _AdminScreenState extends State<AdminScreen> {
 
               const SizedBox(height: 40),
 
-              // ---------- Botón de Cerrar Sesión ----------
+              // Botón de Cerrar Sesión 
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -559,7 +559,7 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
-  // NUEVO: Tarjeta para producto
+  // Tarjeta para producto
   Widget _buildProductCard({
     required String nombre,
     required String categoria,

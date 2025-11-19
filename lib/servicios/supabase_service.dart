@@ -8,9 +8,8 @@ class SupabaseService {
   SupabaseClient get _client => Supabase.instance.client;
   final _uuid = const Uuid();
 
-  /// =====================
-  /// 🔹 OBTENER PERFIL DE MESERO (tabla usuario)
-  /// =====================
+  /// OBTENER PERFIL DE MESERO (tabla usuario)
+
   Future<Map<String, dynamic>?> fetchMeseroProfile(String email) async {
     final data = await _client
         .from('usuario')
@@ -22,9 +21,9 @@ class SupabaseService {
     return data;
   }
 
-  /// =====================
-  /// 🔹 PRODUCTOS (tabla producto)
-  /// =====================
+
+  /// PRODUCTOS (tabla producto)
+
   Future<List<Map<String, dynamic>>> fetchProductos() async {
     final data = await _client
         .from('producto')
@@ -35,9 +34,8 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(data);
   }
 
-  /// =====================
-  /// 🔹 CREAR PEDIDO (tabla pedidos)
-  /// =====================
+  /// CREAR PEDIDO (tabla pedidos)
+
   Future<String> createOrder({
     required int tableNumber,
     required String waiterId, // id_usuario del mesero (TEXT)
@@ -69,9 +67,8 @@ class SupabaseService {
     return response['id'].toString();
   }
 
-  /// =====================
-  /// 🔹 AGREGAR PRODUCTOS (tabla detalle_pedido)
-  /// =====================
+  /// AGREGAR PRODUCTOS (tabla detalle_pedido)
+
   Future<void> addOrderItems(
       String orderId, List<Map<String, dynamic>> itemsRows) async {
     final mappedItems = itemsRows.map((m) {
@@ -91,9 +88,9 @@ class SupabaseService {
     await _client.from('detalle_pedido').insert(mappedItems);
   }
 
-  /// =====================
-  /// 🔹 OBTENER PEDIDOS DEL MESERO
-  /// =====================
+
+  /// OBTENER PEDIDOS DEL MESERO
+
   Future<List<Map<String, dynamic>>> fetchMyOrdersWithItems(
       String waiterIdString) async {
     final data = await _client
@@ -120,9 +117,8 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(data);
   }
 
-  /// =====================
-  /// 🔹 OBTENER TODOS LOS PEDIDOS (COCINA/ADMIN)
-  /// =====================
+  /// OBTENER TODOS LOS PEDIDOS (COCINA/ADMIN)
+
   Future<List<Map<String, dynamic>>> fetchAllOrdersWithItems() async {
     final data = await _client
         .from('pedidos')
@@ -147,9 +143,9 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(data);
   }
 
-  /// =====================
-  /// 🔹 ACTUALIZAR ESTADO DE UN PRODUCTO (detalle_pedido)
-  /// =====================
+
+  /// ACTUALIZAR ESTADO DE UN PRODUCTO (detalle_pedido)
+
   Future<void> updateProductStatus(String itemId, String newStatus) async {
     final normalizedStatus = OrderStatusMapper.normalize(newStatus);
 
@@ -204,9 +200,9 @@ class SupabaseService {
     return resultingStatus ?? OrderStatus.pendiente;
   }
 
-  /// =====================
-  /// 🔹 OBTENER MESAS (por ID_MESERO)
-  /// =====================
+
+  /// OBTENER MESAS (por ID_MESERO)
+
   Future<List<TableData>> fetchTables(int waiterId) async {
     try {
       final data = await _client
@@ -234,9 +230,8 @@ class SupabaseService {
     }
   }
 
-  /// =====================
-  /// 🔹 ACTUALIZAR ESTADO DE LA MESA
-  /// =====================
+  /// ACTUALIZAR ESTADO DE LA MESA
+
   Future<void> updateTableStatus(int tableId, TableStatus status) async {
     try {
       await _client
@@ -248,9 +243,9 @@ class SupabaseService {
     }
   }
 
-  /// =====================
-  /// 🔹 ACTUALIZAR ESTADO DE PEDIDO
-  /// =====================
+
+  /// ACTUALIZAR ESTADO DE PEDIDO
+
   Future<void> updateOrderStatus(String orderId, OrderStatus status) async {
     await _client
         .from('pedidos')
@@ -258,9 +253,9 @@ class SupabaseService {
         .eq('id', orderId);
   }
 
-  /// =====================
-  /// 🔹 CERRAR SESIÓN
-  /// =====================
+
+  /// CERRAR SESIÓN
+
   Future<void> logOut() async {
     await _client.auth.signOut();
   }

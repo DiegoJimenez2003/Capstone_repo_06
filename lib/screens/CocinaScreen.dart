@@ -199,7 +199,7 @@ class _CocinaScreenState extends State<CocinaScreen> {
 
                 const SizedBox(height: 30),
 
-                // 🔹 BOTÓN DE CERRAR SESIÓN
+                // BOTÓN DE CERRAR SESIÓN
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

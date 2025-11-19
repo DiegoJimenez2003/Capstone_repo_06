@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../screens/AdminScreen.dart';
 import '../screens/CocinaScreen.dart';
 import '../screens/MeseroScreen.dart';
-import '../servicios/supabase_service.dart'; // Necesitamos el servicio para buscar el rol
+import '../servicios/supabase_service.dart'; 
 
 class Loginscreen extends StatefulWidget {
   const Loginscreen({super.key});
@@ -220,7 +220,7 @@ class _LoginscreenState extends State<Loginscreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Botón de Inicio de Sesión (ahora asíncrono y con validación de rol)
+                    // Botón de Inicio de Sesión con validación de rol
                     SizedBox(
                       width: double.infinity,
                       height: 48,
