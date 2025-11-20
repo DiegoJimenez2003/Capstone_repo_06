@@ -1,0 +1,31 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" version="29.1.0">
+  <diagram name="Página-1" id="GeXufXBrQPsbFJk8v-uZ">
+    <mxGraphModel grid="0" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="vdlN1G63GVJTgRWl8jLs-5" edge="1" parent="1" source="vdlN1G63GVJTgRWl8jLs-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="vdlN1G63GVJTgRWl8jLs-2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="vdlN1G63GVJTgRWl8jLs-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;h2 style=&quot;text-align: justify;&quot;&gt;Frontend – Flutter&lt;/h2&gt;&lt;div&gt;&lt;ul&gt;&lt;li&gt;Flutter (Dart)&lt;/li&gt;&lt;li&gt;Navegación por pantallas&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="280" x="208" y="7" as="geometry" />
+        </mxCell>
+        <mxCell id="vdlN1G63GVJTgRWl8jLs-6" edge="1" parent="1" source="vdlN1G63GVJTgRWl8jLs-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="vdlN1G63GVJTgRWl8jLs-3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="vdlN1G63GVJTgRWl8jLs-2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;h2&gt;Capa de Negocio (Lógica de Aplicación)&lt;/h2&gt;&lt;div&gt;&lt;ul&gt;&lt;li style=&quot;text-align: left;&quot;&gt;Modelos (Order, OrderItem, Mesa, Usuario, etc.)&lt;/li&gt;&lt;li style=&quot;text-align: left;&quot;&gt;Validaciones y reglas (por ejemplo: no enviar pedido sin mesa o género)&lt;/li&gt;&lt;li style=&quot;text-align: left;&quot;&gt;Control de estados (pendiente, preparación, al horno, listo, entregado)&lt;/li&gt;&lt;li style=&quot;text-align: left;&quot;&gt;Manejo de roles (Cocinero , mesero , Administrador).&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;&lt;div style=&quot;text-align: left;&quot;&gt;&lt;br&gt;&lt;/div&gt;&lt;div style=&quot;text-align: left;&quot;&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="200" width="280" x="208" y="148" as="geometry" />
+        </mxCell>
+        <mxCell id="vdlN1G63GVJTgRWl8jLs-15" edge="1" parent="1" source="vdlN1G63GVJTgRWl8jLs-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="vdlN1G63GVJTgRWl8jLs-4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="vdlN1G63GVJTgRWl8jLs-3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;h2&gt;Capa de Servicio / Integración (SupabaseService)&lt;/h2&gt;&lt;div&gt;&lt;ul&gt;&lt;li data-start=&quot;1332&quot; data-end=&quot;1348&quot;&gt;&lt;p data-start=&quot;1334&quot; data-end=&quot;1348&quot;&gt;Supabase SDK&lt;/p&gt;&lt;/li&gt;&lt;li data-start=&quot;1349&quot; data-end=&quot;1393&quot;&gt;&lt;p data-start=&quot;1351&quot; data-end=&quot;1393&quot;&gt;Peticiones CRUD (insert, update, select)&lt;/p&gt;&lt;/li&gt;&lt;li data-start=&quot;1394&quot; data-end=&quot;1426&quot;&gt;&lt;p data-start=&quot;1396&quot; data-end=&quot;1426&quot;&gt;Autenticación (email/password)&lt;/p&gt;&lt;/li&gt;&lt;/ul&gt;&lt;br&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="280" x="208" y="381" as="geometry" />
+        </mxCell>
+        <mxCell id="vdlN1G63GVJTgRWl8jLs-4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;br&gt;&lt;h2&gt;Capa de Datos (Base de Datos – Supabase PostgreSQL)&lt;/h2&gt;&lt;div&gt;&lt;ul&gt;&lt;li data-start=&quot;1883&quot; data-end=&quot;1895&quot;&gt;&lt;p data-start=&quot;1885&quot; data-end=&quot;1895&quot;&gt;Detalle_pedido&lt;/p&gt;&lt;/li&gt;&lt;li data-start=&quot;1883&quot; data-end=&quot;1895&quot;&gt;&lt;p data-start=&quot;1885&quot; data-end=&quot;1895&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Encuesta_cliente&lt;/span&gt;&lt;/p&gt;&lt;/li&gt;&lt;li data-start=&quot;1883&quot; data-end=&quot;1895&quot;&gt;&lt;p data-start=&quot;1885&quot; data-end=&quot;1895&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Mesa&lt;/span&gt;&lt;/p&gt;&lt;/li&gt;&lt;li data-start=&quot;1883&quot; data-end=&quot;1895&quot;&gt;&lt;p data-start=&quot;1885&quot; data-end=&quot;1895&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Pedidos&lt;/span&gt;&lt;/p&gt;&lt;/li&gt;&lt;li data-start=&quot;1883&quot; data-end=&quot;1895&quot;&gt;&lt;p data-start=&quot;1885&quot; data-end=&quot;1895&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Producto&lt;/span&gt;&lt;/p&gt;&lt;/li&gt;&lt;li data-start=&quot;1883&quot; data-end=&quot;1895&quot;&gt;&lt;p data-start=&quot;1885&quot; data-end=&quot;1895&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Rol&amp;nbsp;&lt;/span&gt;&lt;/p&gt;&lt;/li&gt;&lt;li data-start=&quot;1883&quot; data-end=&quot;1895&quot;&gt;&lt;p data-start=&quot;1885&quot; data-end=&quot;1895&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Usuario&lt;/span&gt;&lt;/p&gt;&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="255" width="280" x="210" y="577" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
